@@ -47,9 +47,9 @@ def get_celebA_dataset(batch_size, img_size):
     train_dataset = torchvision.datasets.ImageFolder(image_path + 'celebA', transformation)
     
     indices = pd.read_csv('celebA/list_eval_partition.csv')
-    train_indices = list(indices[indices.partition == 0].index)[:10]
+    train_indices = list(indices[indices.partition == 0].index)
     validation_indices = list(indices[indices.partition == 1].index)[:10]
-    test_indices = list(indices[indices.partition == 2].index)[:10]
+    test_indices = list(indices[indices.partition == 2].index)
     
     train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
     validation_sampler = torch.utils.data.SubsetRandomSampler(validation_indices)

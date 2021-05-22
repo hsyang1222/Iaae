@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 
+
 class Encoder(nn.Module):
     def __init__(self, latent_dim, image_shape):
         super(Encoder, self).__init__()

@@ -6,7 +6,6 @@ from torch.autograd import Variable
 import numpy as np
 from PIL import Image
 
-
 def sample_image(encoder, decoder, x):
     z = encoder(x)
     return decoder(z)
