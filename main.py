@@ -19,7 +19,8 @@ import hashlib
 def main(args):
     # load real images info or generate real images info
     model_name = args.model_name
-    torch.cuda.set_device(device=args.device)
+    #torch.cuda.set_device(device=args.device)
+    device = args.device
     epochs = args.epochs
     batch_size = args.batch_size
     img_size = args.img_size
@@ -79,7 +80,7 @@ def main(args):
         inception_model_score.load_real_images_info('./inception_model_info/' + real_images_info_file_name)
 
     else : 
-        inception_model_score.model_to('cuda')
+        inception_model_score.model_to(device)
         
         #put real image
         for each_batch in train_loader : 
@@ -170,7 +171,7 @@ def main(args):
             encoder = encoder.to('cpu')
             decoder = decoder.to('cpu')
             discriminator = discriminator.to('cpu')
-            inception_model_score.model_to('cuda')
+            inception_model_score.model_to(device)
             
             #generate fake images info
             inception_model_score.lazy_forward(batch_size=64, device='cuda', fake_forward=True)
@@ -179,9 +180,9 @@ def main(args):
             
             #onload all GAN model to gpu and offload inception model to cpu
             inception_model_score.model_to('cpu')
-            encoder = encoder.to('cuda')
-            decoder = decoder.to('cuda')
-            discriminator = discriminator.to('cuda')
+            encoder = encoder.to(device)
+            decoder = decoder.to(device)
+            discriminator = discriminator.to(device)
             
             precision, recall, fid, inception_score_real, inception_score_fake, density, coverage = \
                 metrics['precision'], metrics['recall'], metrics['fid'], metrics['real_is'], metrics['fake_is'], metrics['density'], metrics['coverage']
