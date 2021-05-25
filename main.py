@@ -19,7 +19,8 @@ import hashlib
 def main(args):
     # load real images info or generate real images info
     model_name = args.model_name
-    torch.cuda.set_device(device=args.device)
+    #torch.cuda.set_device(device=args.device)
+    device = args.device
     epochs = args.epochs
     batch_size = args.batch_size
     img_size = args.img_size
@@ -37,9 +38,9 @@ def main(args):
     customize
     '''
     if model_name in ['vanilla', 'yeop_n_iter', 'yeop_loss']:
-        encoder = Encoder(latent_dim, image_shape).cuda()
-        decoder = Decoder(latent_dim, image_shape).cuda()
-        discriminator = Discriminator(latent_dim).cuda()
+        encoder = Encoder(latent_dim, image_shape).to(device)
+        decoder = Decoder(latent_dim, image_shape).to(device
+        discriminator = Discriminator(latent_dim).to(device)
     else:
         raise Exception('model name is wrong')
 
@@ -92,7 +93,7 @@ def main(args):
         inception_model_score.load_real_images_info('./inception_model_info/' + real_images_info_file_name)
 
     else : 
-        inception_model_score.model_to('cuda')
+        inception_model_score.model_to(device)
         
         #put real image
         for each_batch in train_loader : 
@@ -100,7 +101,7 @@ def main(args):
             inception_model_score.put_real(X_train_batch)
 
         #generate real images info
-        inception_model_score.lazy_forward(batch_size=batch_size, device='cuda', real_forward=True)
+        inception_model_score.lazy_forward(batch_size=batch_size, device=device, real_forward=True)
         inception_model_score.calculate_real_image_statistics()
         #save real images info for next experiments
         inception_model_score.save_real_images_info('./inception_model_info/' + real_images_info_file_name)
@@ -147,7 +148,7 @@ def main(args):
 
         for each_batch in tqdm.tqdm(train_loader):
             batch_count += 1
-            X_train_batch = Variable(each_batch[0]).cuda()
+            X_train_batch = Variable(each_batch[0]).to(device)
 
             '''
             customize
@@ -183,18 +184,18 @@ def main(args):
             encoder = encoder.to('cpu')
             decoder = decoder.to('cpu')
             discriminator = discriminator.to('cpu')
-            inception_model_score.model_to('cuda')
+            inception_model_score.model_to(device)
             
             #generate fake images info
-            inception_model_score.lazy_forward(batch_size=64, device='cuda', fake_forward=True)
+            inception_model_score.lazy_forward(batch_size=64, device=device, fake_forward=True)
             inception_model_score.calculate_fake_image_statistics()
             metrics = inception_model_score.calculate_generative_score()
             
             #onload all GAN model to gpu and offload inception model to cpu
             inception_model_score.model_to('cpu')
-            encoder = encoder.to('cuda')
-            decoder = decoder.to('cuda')
-            discriminator = discriminator.to('cuda')
+            encoder = encoder.to(device)
+            decoder = decoder.to(device)
+            discriminator = discriminator.to(device)
             
             precision, recall, fid, inception_score_real, inception_score_fake, density, coverage = \
                 metrics['precision'], metrics['recall'], metrics['fid'], metrics['real_is'], metrics['fake_is'], metrics['density'], metrics['coverage']
