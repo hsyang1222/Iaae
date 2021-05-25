@@ -64,16 +64,16 @@ def main(args):
         #unzip dining_room_train_lmdb.zip
         #located dining_room_train_lmdb folder in dataset directory
         train_loader = get_lsun_dataset(batch_size, image_size, classes='dining_room_train')
-    elif dataset == 'LSUN_bridge':
-        #wget http://dl.yf.io/lsun/scenes/bridge_train_lmdb.zip
-        #unzip bridge_train_lmdb.zip
-        #located bridge_train_lmdb folder in dataset directory
-        train_loader = get_lsun_dataset(batch_size, image_size, classes='bridge_train')
-    elif dataset == 'LSUN_tower':
-        #wget http://dl.yf.io/lsun/scenes/tower_train_lmdb.zip
-        #unzip tower_train_lmdb.zip
-        #located tower_train_lmdb folder in dataset directory
-        train_loader = get_lsun_dataset(batch_size, image_size, classes='tower_train')
+    elif dataset == 'LSUN_classroom':
+        #wget http://dl.yf.io/lsun/scenes/classroom_train_lmdb.zip
+        #unzip classroom_train_lmdb.zip
+        #located classroom_train_lmdb folder in dataset directory
+        train_loader = get_lsun_dataset(batch_size, image_size, classes='classroom_train')
+    elif dataset == 'LSUN_conference':
+        #wget http://dl.yf.io/lsun/scenes/conference_room_train_lmdb.zip
+        #unzip conference_room_train_lmdb.zip
+        #located conference_room_train_lmdb folder in dataset directory
+        train_loader = get_lsun_dataset(batch_size, image_size, classes='conference_room_train')
     elif dataset == 'LSUN_churches':
         #wget http://dl.yf.io/lsun/scenes/church_outdoor_train_lmdb.zip
         #unzip church_outdoor_train_lmdb.zip
