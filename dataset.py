@@ -64,6 +64,19 @@ def get_celebA_dataset(batch_size, img_size):
     
     return train_loader, validation_loader, test_loader
 
+def get_lsun_dataset(batch_size, image_size, classes) : 
+    # 공유 폴더 lsun안의 폴더째로 ../lsun/dataset에 저장
+    image_path = "../lsun/dataset"
+    dataset = torchvision.datasets.LSUN(root=image_path, classes=[classes], transform=transforms.Compose([
+                                            transforms.Resize(image_size),
+                                            transforms.CenterCrop(image_size), 
+                                            transforms.ToTensor(), 
+                                            transforms.Normalize((0.5, 0.5, 0.5),
+                                            (0.5, 0.5, 0.5)),  ]))
+    
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return train_loader
+
 
 
 def get_cifar1_dataset(batch_size, img_size) : 

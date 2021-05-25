@@ -58,15 +58,28 @@ def main(args):
         train_loader, validation_loader, test_loader = get_celebA_dataset(batch_size, img_size)
     elif dataset == 'FFHQ':
         train_loader, test_loader = get_ffhq_thumbnails(batch_size, image_size)
-    elif dataset == 'LSUN_bedroom':
-        pass
-    elif dataset == 'LSUN_cars':
-        pass
-    elif dataset == 'LSUN_cats':
-        pass
+    elif dataset == 'LSUN_dining_room':
+        #wget http://dl.yf.io/lsun/scenes/dining_room_train_lmdb.zip
+        #unzip dining_room_train_lmdb.zip
+        #located dining_room_train_lmdb folder in dataset directory
+        train_loader = get_lsun_dataset(batch_size, image_size, classes='dining_room_train')
+    elif dataset == 'LSUN_bridge':
+        #wget http://dl.yf.io/lsun/scenes/bridge_train_lmdb.zip
+        #unzip bridge_train_lmdb.zip
+        #located bridge_train_lmdb folder in dataset directory
+        train_loader = get_lsun_dataset(batch_size, image_size, classes='bridge_train')
+    elif dataset == 'LSUN_tower':
+        #wget http://dl.yf.io/lsun/scenes/tower_train_lmdb.zip
+        #unzip tower_train_lmdb.zip
+        #located tower_train_lmdb folder in dataset directory
+        train_loader = get_lsun_dataset(batch_size, image_size, classes='tower_train')
     elif dataset == 'LSUN_churches':
-        pass
+        #wget http://dl.yf.io/lsun/scenes/church_outdoor_train_lmdb.zip
+        #unzip church_outdoor_train_lmdb.zip
+        #located church_outdoor_train_lmdb folder in dataset directory
+        train_loader = get_lsun_dataset(batch_size, image_size, classes='church_outdoor_train')
     else:
+        print("dataset is forced selected to cifar10")
         train_loader = get_cifar1_dataset(batch_size, img_size)
     
     
