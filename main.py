@@ -39,7 +39,7 @@ def main(args):
     '''
     if model_name in ['vanilla', 'yeop_n_iter', 'yeop_loss']:
         encoder = Encoder(latent_dim, image_shape).to(device)
-        decoder = Decoder(latent_dim, image_shape).to(device
+        decoder = Decoder(latent_dim, image_shape).to(device)
         discriminator = Discriminator(latent_dim).to(device)
     else:
         raise Exception('model name is wrong')
