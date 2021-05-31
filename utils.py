@@ -37,15 +37,12 @@ def save_scores_and_print(current_epoch, epochs, r_loss, d_loss, g_loss, precisi
           % (current_epoch, epochs, r_loss, d_loss, g_loss, precision, recall, fid, inception_score_real, inception_score_fake))
 
 
-def save_images(n_row, epoch, latent_dim, model, dataset, model_name):
-    cuda = True if torch.cuda.is_available() else False
-    Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
-    
+def save_images(n_row, epoch, latent_dim, model, dataset, model_name, device):
     folder_name = '%s_%s' % (dataset, model_name)
     os.makedirs('images/%s' % folder_name, exist_ok=True)
     """Saves a grid of generated digits"""
     # Sample noise
-    z = Variable(Tensor(np.random.normal(0, 1, (n_row ** 2, latent_dim))))
+    z = torch.tensor(  np.random.normal(0, 1,(n_row ** 2, latent_dim) )).float().to(device)
     gen_imgs = model(z)
     image_name = "images/%s/%d_epoch.png" % (folder_name, epoch)
     save_image(gen_imgs.data, image_name, nrow=n_row, normalize=True)

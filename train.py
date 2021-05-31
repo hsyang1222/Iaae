@@ -16,7 +16,7 @@ def update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder):
 def update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim):
     d_optimizer.zero_grad()
     batch_size = X_train_batch.size(0)
-    z_prior = Variable(torch.FloatTensor(np.random.normal(0, 1, (batch_size, latent_dim)))).cuda()
+    z_prior = Variable(torch.FloatTensor(np.random.normal(0, 1, (batch_size, latent_dim)))).to(X_train_batch.device)
     z_posterior = encoder(X_train_batch)
     d_loss = -torch.mean(torch.log(discriminator(z_prior)) + torch.log(1 - discriminator(z_posterior)))
     d_loss.backward()

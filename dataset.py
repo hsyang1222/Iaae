@@ -4,13 +4,15 @@ import pandas as pd
 from torchvision import transforms
 
 
-def get_celebA_dataset(batch_size, image_size):
+def get_celebA_dataset(batch_size, image_size, mini=False):
     image_path = "../data/"
-    transformation = transforms.Compose([
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-    ])
-    train_dataset = torchvision.datasets.ImageFolder(image_path + 'celeba', transformation)
+    transformation = transforms.Compose([transforms.Resize(image_size),
+                                            transforms.CenterCrop(image_size), 
+                                            transforms.ToTensor(), 
+                                            transforms.Normalize((0.5, 0.5, 0.5),
+                                            (0.5, 0.5, 0.5)), ])
+
+    train_dataset = torchvision.datasets.ImageFolder(image_path, transformation)
     num_train = len(train_dataset)
     indices = list(range(num_train))
     train_indices, test_indices = indices[:10000], indices[200000:]
@@ -18,6 +20,7 @@ def get_celebA_dataset(batch_size, image_size):
     test_sampler = torch.utils.data.SubsetRandomSampler(test_indices)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
     test_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=test_sampler)
+
     return train_loader, test_loader
 
 
@@ -27,7 +30,7 @@ def get_ffhq_thumbnails(batch_size, image_size):
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
     ])
-    train_dataset = torchvision.datasets.ImageFolder(image_path + 'ffhq/thumbnails128x128', transformation)
+    train_dataset = torchvision.datasets.ImageFolder(image_path + 'FFHQ/', transformation)
     num_train = len(train_dataset)
     indices = list(range(num_train))
     train_indices, test_indices = indices[:60000], indices[60000:]
@@ -37,7 +40,7 @@ def get_ffhq_thumbnails(batch_size, image_size):
     test_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=test_sampler)
     return train_loader, test_loader
 
-
+'''
 def get_celebA_dataset(batch_size, img_size):
     image_path = "./"
     transformation = transforms.Compose([
@@ -63,6 +66,7 @@ def get_celebA_dataset(batch_size, img_size):
                                               sampler=test_sampler)
     
     return train_loader, validation_loader, test_loader
+'''
 
 def get_lsun_dataset(batch_size, image_size, classes) : 
     # 공유 폴더 lsun안의 폴더째로 ../lsun/dataset에 저장
@@ -80,8 +84,8 @@ def get_lsun_dataset(batch_size, image_size, classes) :
 
 
 def get_cifar1_dataset(batch_size, img_size) : 
-
-    dataset = torchvision.datasets.CIFAR10(root='20210306_gan/dataset', # download=True,
+    image_path = "../data"
+    dataset = torchvision.datasets.CIFAR10(root=image_path, # download=True,
                                transform=transforms.Compose([
                                    transforms.Resize((img_size,img_size)),
                                    transforms.ToTensor(),

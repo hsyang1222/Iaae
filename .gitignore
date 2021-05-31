@@ -5,3 +5,5 @@ celebA/
 20210306_gan/
 inception_model_info/
 _cache_*
+images/
+logs/
