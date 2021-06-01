@@ -53,11 +53,11 @@ def gme_update_discriminator(d_optimizer, X_train_batch, encoder, decoder, discr
     batch_size = X_train_batch.size(0)
     device=X_train_batch.device
     
-    real_label = torch.ones(batch_size, device=device)
+    real_label = torch.ones((batch_size,1), device=device)
     predict_about_real = discriminator(X_train_batch)
     loss_about_real = bce(predict_about_real, real_label)
     
-    fake_label = torch.zeros(batch_size, device=device)
+    fake_label = torch.zeros((batch_size,1), device=device)
     encoded_z = encoder(X_train_batch)
     fake = decoder(encoded_z)
     predict_about_fake = discriminator(fake)
@@ -75,7 +75,7 @@ def gme_update_generator(g_optimizer, X_train_batch, encoder, decoder, discrimin
     batch_size = X_train_batch.size(0)
     device=X_train_batch.device
     
-    real_label = torch.ones(batch_size, device=device)
+    real_label = torch.ones((batch_size,1), device=device)
     
     encoded_z = encoder(X_train_batch)
     fake = decoder(encoded_z)

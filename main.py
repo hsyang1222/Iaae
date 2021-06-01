@@ -38,8 +38,11 @@ def main(args):
     image_shape = [3, img_size, img_size]
     
     wandb.login()
+    wandb_name = dataset+','+model_name +','+str(img_size)
+    if args.run_test : wandb_name += ', test run'
     wandb.init(project=project_name, 
-               config=args)
+               config=args,
+               name = wandb_name)
     config = wandb.config
 
     '''
@@ -60,7 +63,11 @@ def main(args):
     elif model_name == 'gme' : 
         encoder = GME_Encoder(latent_dim, image_shape).to(device)
         decoder = GME_Decoder(latent_dim, image_shape).to(device)
-        discrimiator = GME_Discriminator(image_shape).to(device)
+        discriminator = GME_Discriminator(image_shape).to(device)
+    elif model_name == "latent_mapping" :
+        encoder = Encoder(latent_dim, image_shape).to(device)
+        decoder = StackDecoder(latent_dim, image_shape).to(device)
+        discriminator = Discriminator(latent_dim).to(device)
     else:
         raise Exception('model name is wrong')
 
@@ -75,9 +82,15 @@ def main(args):
     customize
     '''
     if dataset == 'CelebA':
-        train_loader, test_loader = get_celebA_dataset(batch_size, img_size)
+        train_loader = get_celebA_dataset(batch_size, img_size)
     elif dataset == 'FFHQ':
         train_loader, test_loader = get_ffhq_thumbnails(batch_size, img_size)
+    elif dataset == 'mnist':
+        train_loader = get_mnist_dataset(batch_size, img_size)
+    elif dataset == 'mnist_fashion':
+        train_loader = get_mnist_fashion_dataset(batch_size, img_size)
+    elif dataset == 'emnist':
+        train_loader = get_emnist_dataset(batch_size, img_size)
     elif dataset == 'LSUN_dining_room':
         #wget http://dl.yf.io/lsun/scenes/dining_room_train_lmdb.zip
         #unzip dining_room_train_lmdb.zip
@@ -159,7 +172,7 @@ def main(args):
             customize
             '''
             if model_name == 'gme' : 
-                pass
+                r_loss = torch.zeros(1)
             else :
                 r_loss = update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder)
             
@@ -170,7 +183,7 @@ def main(args):
                     d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
             elif model_name == 'gme':
                 d_loss = gme_update_discriminator(d_optimizer, X_train_batch, encoder, decoder, discriminator, latent_dim)
-            else
+            else:
                 d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
 
             if model_name == 'gme' :
@@ -262,10 +275,10 @@ if __name__ == "__main__":
     parser.add_argument('--n_iter', type=int, default=3)
     parser.add_argument('--project_name', type=str, default='AAE')
     parser.add_argument('--dataset', type=str, default='', choices=['LSUN_dining_room', 'LSUN_classroom', 'LSUN_conference', 'LSUN_churches',
-                                                                    'FFHQ', 'CelebA', 'cifar10'])
+                                                                    'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 
     parser.add_argument('--model_name', type=str, default='', choices=['vanilla', 'yeop_loss', 
-                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme'])
+                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme', 'latent_mapping'])
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)

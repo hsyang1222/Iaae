@@ -243,10 +243,40 @@ class Mod2Decoder(nn.Module):
         decoded = decoded_flat.view(decoded_flat.shape[0], *self.image_shape)
         return decoded
 
+class StackDecoder(nn.Module):
+    def __init__(self, latent_dim, image_shape):
+        super(StackDecoder, self).__init__()
+
+        self.model = nn.Sequential(
+            #mapping 
+            nn.Linear(latent_dim, latent_dim),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(latent_dim, latent_dim),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(latent_dim, latent_dim),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(latent_dim, latent_dim),
+            nn.LeakyReLU(0.2, inplace=True),
+            ###
+            
+            nn.Linear(latent_dim, 64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(64, 128),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(128, int(np.prod(image_shape))),
+            nn.Tanh(),
+        )
+        self.image_shape = image_shape
+
+    def forward(self, z_posterior):
+        decoded_flat = self.model(z_posterior)
+        decoded = decoded_flat.view(decoded_flat.shape[0], *self.image_shape)
+        return decoded
 
 class GME_Encoder(nn.Module):
     def __init__(self, latent_dim, image_shape):
-        super(Encoder, self).__init__()
+        super(GME_Encoder, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(int(np.prod(image_shape)), 128),
             nn.LeakyReLU(0.2, inplace=True),
@@ -285,7 +315,7 @@ class GME_Encoder(nn.Module):
 
 class GME_Decoder(nn.Module):
     def __init__(self, latent_dim, image_shape):
-        super(Decoder, self).__init__()
+        super(GME_Decoder, self).__init__()
 
         self.model = nn.Sequential(
             nn.Linear(latent_dim, 64),
@@ -306,7 +336,7 @@ class GME_Decoder(nn.Module):
 
 class GME_Discriminator(nn.Module):
     def __init__(self, image_shape):
-        super(Discriminator, self).__init__()
+        super(GME_Discriminator, self).__init__()
         self.image_shape = image_shape
         self.model = nn.Sequential(
             nn.Linear(int(np.prod(image_shape)), 128),
