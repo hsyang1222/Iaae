@@ -57,6 +57,10 @@ def main(args):
         encoder = Mod2Encoder(latent_dim, image_shape).to(device)
         decoder = Mod2Decoder(latent_dim, image_shape).to(device)
         discriminator = Discriminator(latent_dim).to(device)
+    elif model_name == 'gme' : 
+        encoder = GME_Encoder(latent_dim, image_shape).to(device)
+        decoder = GME_Decoder(latent_dim, image_shape).to(device)
+        discrimiator = GME_Discriminator(image_shape).to(device)
     else:
         raise Exception('model name is wrong')
 
@@ -154,18 +158,25 @@ def main(args):
             '''
             customize
             '''
-            r_loss = update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder)
+            if model_name == 'gme' : 
+                pass
+            else :
+                r_loss = update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder)
             
             if model_name == 'yeop_loss':
                 d_loss = update_discriminator_add_loss(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
-            
             elif model_name == 'yeop_n_iter':
                 for iter_ in range(n_iter):
                     d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
-            else:
+            elif model_name == 'gme':
+                d_loss = gme_update_discriminator(d_optimizer, X_train_batch, encoder, decoder, discriminator, latent_dim)
+            else
                 d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
 
-            g_loss = update_generator(g_optimizer, X_train_batch, encoder, discriminator)
+            if model_name == 'gme' :
+                 g_loss = gme_update_generator(g_optimizer, X_train_batch, encoder, decoder, discriminator)
+            else:
+                 g_loss = update_generator(g_optimizer, X_train_batch, encoder, discriminator)
 
             sampled_images = sample_image(encoder, decoder, X_train_batch).detach().cpu()
 
@@ -254,7 +265,7 @@ if __name__ == "__main__":
                                                                     'FFHQ', 'CelebA', 'cifar10'])
 
     parser.add_argument('--model_name', type=str, default='', choices=['vanilla', 'yeop_loss', 
-                                                                       'yeop_n_iter', 'mod_var', 'mod2_var'])
+                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme'])
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)

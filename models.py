@@ -244,6 +244,88 @@ class Mod2Decoder(nn.Module):
         return decoded
 
 
+class GME_Encoder(nn.Module):
+    def __init__(self, latent_dim, image_shape):
+        super(Encoder, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(int(np.prod(image_shape)), 128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.mu = nn.Linear(64, latent_dim)
+        #self.sigma = nn.Linear(64, latent_dim)
+        self.cov = nn.Linear(64, latent_dim*latent_dim)
+        self.latent_dim = latent_dim
+
+    def forward(self, x):
+        x_flat = x.view(x.shape[0], -1)
+        mu, cov = self.encode(x_flat)
+        z_posterior = self.reparameterize(mu, cov)
+        return z_posterior
+
+    def encode(self, x):
+        x = self.model(x)
+        mu = self.mu(x)
+        cov_flatten = self.cov(x)
+        return mu, cov_flatten.view(-1,self.latent_dim,self.latent_dim)
+
+    def reparameterize(self, mu, cov):
+        device = mu.device
+        Sigma_k = torch.matmul(cov, cov.permute([0,2,1]))
+        Sigma_k.add_(torch.eye(self.latent_dim).to(device))
+        self.MGM = torch.distributions.multivariate_normal.MultivariateNormal(mu, Sigma_k)
+        random_value = self.MGM.sample()
+        
+        #eps = Variable(torch.FloatTensor(np.random.normal(0, 1, (batch_size, self.latent_dim)))).to(device)
+        return random_value
+
+
+class GME_Decoder(nn.Module):
+    def __init__(self, latent_dim, image_shape):
+        super(Decoder, self).__init__()
+
+        self.model = nn.Sequential(
+            nn.Linear(latent_dim, 64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(64, 128),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(128, int(np.prod(image_shape))),
+            nn.Tanh(),
+        )
+        self.image_shape = image_shape
+
+    def forward(self, z_posterior):
+        decoded_flat = self.model(z_posterior)
+        decoded = decoded_flat.view(decoded_flat.shape[0], *self.image_shape)
+        return decoded
+
+
+class GME_Discriminator(nn.Module):
+    def __init__(self, image_shape):
+        super(Discriminator, self).__init__()
+        self.image_shape = image_shape
+        self.model = nn.Sequential(
+            nn.Linear(int(np.prod(image_shape)), 128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, z):
+        validity = self.model(z.view(z.size(0),-1))
+        return validity    
+    
+    
 # 김상엽
 
 
