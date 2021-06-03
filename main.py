@@ -38,7 +38,7 @@ def main(args):
     image_shape = [3, img_size, img_size]
     
     wandb.login()
-    wandb_name = dataset+','+model_name +','+str(img_size)
+    wandb_name = dataset+','+model_name +','+str(img_size)+",infr_sample"
     if args.run_test : wandb_name += ', test run'
     wandb.init(project=project_name, 
                config=args,
@@ -191,8 +191,8 @@ def main(args):
             else:
                  g_loss = update_generator(g_optimizer, X_train_batch, encoder, discriminator)
 
-            sampled_images = sample_image(encoder, decoder, X_train_batch).detach().cpu()
-
+            #sampled_images = sample_image(encoder, decoder, X_train_batch).detach().cpu()
+            sampled_images = inference_image(decoder, batch_size=X_train_batch.size(0), latent_dim=latent_dim, device=device).detach().cpu()
             if i % loss_calculation_interval == 0:
                 if model_name == 'gme_inference' : 
                     pass
