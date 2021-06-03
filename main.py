@@ -194,7 +194,10 @@ def main(args):
             sampled_images = sample_image(encoder, decoder, X_train_batch).detach().cpu()
 
             if i % loss_calculation_interval == 0:
-                inception_model_score.put_fake(sampled_images)
+                if model_name == 'gme_inference' : 
+                    pass
+                else : 
+                    inception_model_score.put_fake(sampled_images)
             
             if args.run_test : break
         
@@ -278,7 +281,7 @@ if __name__ == "__main__":
                                                                     'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 
     parser.add_argument('--model_name', type=str, default='', choices=['vanilla', 'yeop_loss', 
-                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme', 'latent_mapping'])
+                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme', 'latent_mapping', 'gme_inference'])
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)

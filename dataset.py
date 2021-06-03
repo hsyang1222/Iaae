@@ -29,7 +29,7 @@ def get_celebA_dataset(batch_size, img_size, mini=False):
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
-    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return train_loader
 
 
@@ -100,7 +100,7 @@ def get_mnist_dataset(batch_size, img_size) :
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
-    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 def get_mnist_fashion_dataset(batch_size, img_size) : 
@@ -113,12 +113,12 @@ def get_mnist_fashion_dataset(batch_size, img_size) :
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
-    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 def get_emnist_dataset(batch_size, img_size) : 
     image_path = "../data"
-    dataset = torchvision.datasets.EMNIST(root=image_path, download=True, split='byclass',
+    dataset = torchvision.datasets.EMNIST(root=image_path, download=True, split='balanced',
                                transform=transforms.Compose([
                                    transforms.Grayscale(3),
                                    transforms.Resize((img_size,img_size)),
@@ -126,7 +126,7 @@ def get_emnist_dataset(batch_size, img_size) :
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
-    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 def get_cifar1_dataset(batch_size, img_size) : 
@@ -138,7 +138,7 @@ def get_cifar1_dataset(batch_size, img_size) :
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
-    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 if __name__ == '__main__':
