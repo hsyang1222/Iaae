@@ -34,7 +34,7 @@ def get_celebA_dataset(batch_size, img_size, mini=False):
 
 
 def get_ffhq_thumbnails(batch_size, image_size):
-    image_path = "../dataset/"
+    image_path = "../data/"
     transformation = transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
@@ -131,7 +131,7 @@ def get_emnist_dataset(batch_size, img_size) :
 
 def get_cifar1_dataset(batch_size, img_size) : 
     image_path = "../data"
-    dataset = torchvision.datasets.CIFAR10(root=image_path, # download=True,
+    dataset = torchvision.datasets.CIFAR10(root=image_path,  download=True,
                                transform=transforms.Compose([
                                    transforms.Resize((img_size,img_size)),
                                    transforms.CenterCrop(img_size), 

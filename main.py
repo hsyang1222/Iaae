@@ -260,7 +260,7 @@ def main(args):
                                   inception_score_real, inception_score_fake, dataset, model_name)
             
         inception_model_score.clear_fake()
-    save_losses(epochs, loss_calculation_interval, r_losses, d_losses, g_losses)
+    #save_losses(epochs, loss_calculation_interval, r_losses, d_losses, g_losses)
     wandb.finish()
 
 
