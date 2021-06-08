@@ -11,7 +11,7 @@ def sample_image(encoder, decoder, x):
     return decoder(z)
 
 def inference_image(decoder, batch_size, latent_dim, device) :
-    z = torch.rand(batch_size, latent_dim).to(device)
+    z = torch.randn(batch_size, latent_dim).to(device)
     return decoder(z)
 
 def save_losses(epochs, save_calculation_interval, r_losses, d_losses, g_losses):
