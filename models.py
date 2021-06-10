@@ -355,7 +355,47 @@ class GME_Discriminator(nn.Module):
         validity = self.model(z.view(z.size(0),-1))
         return validity    
     
+class DirectEncoder(nn.Module):
+    def __init__(self, latent_dim, image_shape):
+        super(DirectEncoder, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(int(np.prod(image_shape)), 128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(64, latent_dim)
+        )
+    def forward(self, x):
+        x_flat = x.view(x.shape[0], -1)
+        x = self.model(x_flat)
+        return x    
     
+    
+class ImageDiscriminator(nn.Module):
+    def __init__(self, image_shape):
+        super(ImageDiscriminator, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(int(np.prod(image_shape)), 64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(64, 128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(128, 128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        x_flatten = x.view(x.shape[0], -1)
+        validity = self.model(x_flatten)
+        return validity
 # 김상엽
 
 

@@ -68,6 +68,11 @@ def main(args):
         encoder = Encoder(latent_dim, image_shape).to(device)
         decoder = StackDecoder(latent_dim, image_shape).to(device)
         discriminator = Discriminator(latent_dim).to(device)
+    elif model_name == "direct" :
+        encoder = DirectEncoder(latent_dim, image_shape).to(device)
+        decoder = Decoder(latent_dim, image_shape).to(device)
+        z_dis = Discriminator(latent_dim).to(device)
+        img_dis = ImageDiscriminator(image_shape).to(device)
     else:
         raise Exception('model name is wrong')
 
@@ -146,10 +151,21 @@ def main(args):
     '''
     customize
     '''
-    ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
-    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
-    g_optimizer = torch.optim.Adam(encoder.parameters(), lr=lr)
+    
+    if model_name == 'direct' : 
+        e_optimizer = torch.optim.Adam(encoder.parameters(), lr=lr)
+        g_optimizer = torch.optim.Adam(decoder.parameters(), lr=lr)
+        zd_optimizer = torch.optim.Adam(z_dis.parameters(), lr=lr)
+        imgd_optimizer = torch.optim.Adam(img_dis.parameters(), lr=lr)
+        bce = torch.nn.BCELoss()
+        mse = torch.nn.MSELoss()
+    else : 
+        ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
+        d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
+        g_optimizer = torch.optim.Adam(encoder.parameters(), lr=lr)
 
+    
+    
     r_losses = []
     d_losses = []
     g_losses = []
@@ -167,38 +183,128 @@ def main(args):
         for each_batch in tqdm.tqdm(train_loader, desc='train batch'):
             batch_count += 1
             X_train_batch = Variable(each_batch[0]).to(device)
-
-            '''
-            customize
-            '''
-            if model_name == 'gme' : 
-                r_loss = torch.zeros(1)
-            else :
-                r_loss = update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder)
             
-            if model_name == 'yeop_loss':
-                d_loss = update_discriminator_add_loss(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
-            elif model_name == 'yeop_n_iter':
-                for iter_ in range(n_iter):
+            
+            if model_name == 'direct' :
+                batch_size = X_train_batch.size(0)
+                true_label = torch.ones((batch_size,1), device=device)
+                false_label = torch.zeros((batch_size,1), device=device)
+                #
+                #make distribution of encode(x) to Gaussian
+                #
+                
+                #optim z_dis
+                ##z_dis(gaussian) --> True               
+                gaussian_sample = torch.randn((batch_size, latent_dim), device=device)
+                zd_say_gaussian_is = z_dis(gaussian_sample.detach())
+                zd_gaussian_true = bce(zd_say_gaussian_is, true_label)
+       
+                ##z_dis(E(x)) --> False                
+                real_z = encoder(X_train_batch)
+                zd_say_realz_is = z_dis(real_z)
+                zd_realz_false = bce(zd_say_realz_is, false_label)
+                
+                zd_optimizer.zero_grad()
+                zd_loss = zd_gaussian_true + zd_realz_false
+                zd_loss.backward()
+                zd_optimizer.step()
+                
+                #optim e
+                ##z_dis(E(x)) --> True
+                real_z = encoder(X_train_batch)
+                zd_say_realz_is = z_dis(real_z)
+                zd_realz_true = bce(zd_say_realz_is, true_label)
+                
+                e_optimizer.zero_grad()
+                zd_realz_true.backward()
+                e_optimizer.step()
+                
+                #
+                #make distribution of G(z) to real data
+                #
+                
+                #optim img_dis
+                ##img_dis(real_img) --> True
+                imgd_say_realimg_is = img_dis(X_train_batch)
+                imgd_realimg_true = bce(imgd_say_realimg_is, true_label)
+                
+                ##img_dis(G(z)) --> False
+                fake_img = decoder(gaussian_sample.detach())
+                imgd_say_fakeimg_is = img_dis(fake_img)
+                imgd_fakeimg_false = bce(imgd_say_fakeimg_is, false_label)
+                
+                imgd_optimizer.zero_grad()
+                imgd_loss = imgd_realimg_true + imgd_fakeimg_false
+                imgd_loss.backward()
+                
+                #optim G
+                ##img_dis(G(z)) --> True
+                fake_img = decoder(gaussian_sample.detach())
+                imgd_say_fakeimg_is = img_dis(fake_img)
+                imgd_fakeimg_true = bce(imgd_say_fakeimg_is, true_label)
+                
+                g_optimizer.zero_grad()
+                imgd_fakeimg_true.backward()
+                g_optimizer.step()
+                
+                #
+                # make G(E(x)) --> x only if z_dis(E(x))=True and img_dis(G(E(x))=True
+                #
+            
+                #condition
+                real_z = encoder(X_train_batch)
+                repaint_x = decoder(real_z)
+                condition_z = z_dis(real_z).detach() >= 0.5
+                condition_img = img_dis(repaint_x).detach() >= 0.5
+                condition_onlyif = (condition_z & condition_img)
+                percent_onlyif = torch.sum(condition_onlyif) / len(condition_onlyif)
+                
+                #optim E and G
+                repaint_loss = mse(repaint_x, X_train_batch) * percent_onlyif
+                e_optimizer.zero_grad()
+                g_optimizer.zero_grad()
+                repaint_loss.backward()
+                e_optimizer.step()
+                g_optimizer.step()
+                
+                
+                r_loss = repaint_loss
+                d_loss = imgd_loss + zd_loss
+                g_loss = imgd_fakeimg_true
+                
+            else :     
+
+                '''
+                customize
+                '''
+                if model_name == 'gme' : 
+                    r_loss = torch.zeros(1)
+                else :
+                    r_loss = update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder)
+
+                if model_name == 'yeop_loss':
+                    d_loss = update_discriminator_add_loss(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
+                elif model_name == 'yeop_n_iter':
+                    for iter_ in range(n_iter):
+                        d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
+                elif model_name == 'gme':
+                    d_loss = gme_update_discriminator(d_optimizer, X_train_batch, encoder, decoder, discriminator, latent_dim)
+                else:
                     d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
-            elif model_name == 'gme':
-                d_loss = gme_update_discriminator(d_optimizer, X_train_batch, encoder, decoder, discriminator, latent_dim)
-            else:
-                d_loss = update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim)
 
-            if model_name == 'gme' :
-                 g_loss = gme_update_generator(g_optimizer, X_train_batch, encoder, decoder, discriminator)
-            else:
-                 g_loss = update_generator(g_optimizer, X_train_batch, encoder, discriminator)
+                if model_name == 'gme' :
+                     g_loss = gme_update_generator(g_optimizer, X_train_batch, encoder, decoder, discriminator)
+                else:
+                     g_loss = update_generator(g_optimizer, X_train_batch, encoder, discriminator)
 
-            #sampled_images = sample_image(encoder, decoder, X_train_batch).detach().cpu()
+                
             sampled_images = inference_image(decoder, batch_size=X_train_batch.size(0), latent_dim=latent_dim, device=device).detach().cpu()
             if i % loss_calculation_interval == 0:
                 if model_name == 'gme_inference' : 
                     pass
                 else : 
                     inception_model_score.put_fake(sampled_images)
-            
+
             if args.run_test : break
         
         if i % save_image_interval == 0:
@@ -210,7 +316,11 @@ def main(args):
             #offload all GAN model to cpu and onload inception model to gpu
             encoder = encoder.to('cpu')
             decoder = decoder.to('cpu')
-            discriminator = discriminator.to('cpu')
+            if model_name == 'direct' : 
+                z_dis = z_dis.to('cpu')
+                img_dis = img_dis.to('cpu')
+            else : 
+                discriminator = discriminator.to('cpu')
             inception_model_score.model_to(device)
             
             #generate fake images info
@@ -222,7 +332,11 @@ def main(args):
             inception_model_score.model_to('cpu')
             encoder = encoder.to(device)
             decoder = decoder.to(device)
-            discriminator = discriminator.to(device)
+            if model_name == 'direct' : 
+                z_dis = z_dis.to(device)
+                img_dis = img_dis.to(device)
+            else : 
+                discriminator = discriminator.to(device)
             
             precision, recall, fid, inception_score_real, inception_score_fake, density, coverage = \
                 metrics['precision'], metrics['recall'], metrics['fid'], metrics['real_is'], metrics['fake_is'], metrics['density'], metrics['coverage']
@@ -237,6 +351,23 @@ def main(args):
                            "coverage": coverage, 
                            'encoder V' : torch.sigmoid(encoder.model[3].v),
                            'decoder V' : torch.sigmoid(decoder.model[3].v),
+                          }, step=i)
+            elif model_name == 'direct' : 
+                wandb.log({"precision": precision, 
+                           "recall": recall,
+                           "fid": fid,
+                           "inception_score_real": inception_score_real,
+                           "inception_score_fake": inception_score_fake,
+                           "density": density,
+                           "coverage": coverage, 
+                           "zd_gaussian_true" : zd_gaussian_true,
+                           "zd_realz_false" :zd_realz_false,
+                           "zd_realz_true" :zd_realz_true,
+                           "imgd_realimg_true" :imgd_realimg_true,
+                           "imgd_fakeimg_false" :imgd_fakeimg_false,
+                           "imgd_fakeimg_true" :imgd_fakeimg_true,
+                           "percent_onlyif" :percent_onlyif,
+                           "repaint_loss" :repaint_loss
                           }, step=i)
             else : 
                 wandb.log({"precision": precision, 
@@ -281,7 +412,7 @@ if __name__ == "__main__":
                                                                     'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 
     parser.add_argument('--model_name', type=str, default='', choices=['vanilla', 'yeop_loss', 
-                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme', 'latent_mapping', 'gme_inference'])
+                                                                       'yeop_n_iter', 'mod_var', 'mod2_var', 'gme', 'latent_mapping', 'gme_inference', 'direct'])
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)
