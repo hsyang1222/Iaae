@@ -124,11 +124,11 @@ def main(args):
     real_images_info_file_name = hashlib.md5(str(train_loader.dataset).encode()).hexdigest()+'.pickle'
     if args.run_test : real_images_info_file_name += '.run_test' 
     
-    os.makedirs('inception_model_info', exist_ok=True)
-    if os.path.exists('./inception_model_info/' + real_images_info_file_name) : 
+    os.makedirs('../../inception_model_info', exist_ok=True)
+    if os.path.exists('../../inception_model_info/' + real_images_info_file_name) : 
         print("Using generated real image info.")
         print(train_loader.dataset)
-        inception_model_score.load_real_images_info('./inception_model_info/' + real_images_info_file_name)
+        inception_model_score.load_real_images_info('../../inception_model_info/' + real_images_info_file_name)
 
     else : 
         inception_model_score.model_to(device)
@@ -143,7 +143,7 @@ def main(args):
         inception_model_score.lazy_forward(batch_size=64, device=device, real_forward=True)
         inception_model_score.calculate_real_image_statistics()
         #save real images info for next experiments
-        inception_model_score.save_real_images_info('./inception_model_info/' + real_images_info_file_name)
+        inception_model_score.save_real_images_info('../../inception_model_info/' + real_images_info_file_name)
         #offload inception_model
         inception_model_score.model_to('cpu')
     
@@ -407,7 +407,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_calculation_interval', type=int, default=5)
     parser.add_argument('--latent_dim', type=int, default=10)
     parser.add_argument('--n_iter', type=int, default=3)
-    parser.add_argument('--project_name', type=str, default='AAE')
+    parser.add_argument('--project_name', type=str, default='AAE_exact')
     parser.add_argument('--dataset', type=str, default='', choices=['LSUN_dining_room', 'LSUN_classroom', 'LSUN_conference', 'LSUN_churches',
                                                                     'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 

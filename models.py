@@ -15,27 +15,16 @@ class Encoder(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
         )
 
-        self.mu = nn.Linear(64, latent_dim)
-        self.sigma = nn.Linear(64, latent_dim)
+        self.fc = nn.Linear(64, latent_dim)
+        #self.sigma = nn.Linear(64, latent_dim)
         self.latent_dim = latent_dim
 
     def forward(self, x):
         x_flat = x.view(x.shape[0], -1)
-        mu, sigma = self.encode(x_flat)
-        z_posterior = self.reparameterize(mu, sigma)
-        return z_posterior
+        x_flat = self.model(x_flat)
+        x_flat = self.fc(x_flat)
+        return x_flat
 
-    def encode(self, x):
-        x = self.model(x)
-        mu = self.mu(x)
-        sigma = self.sigma(x)
-        return mu, sigma
-
-    def reparameterize(self, mu, sigma):
-        from torch.autograd import Variable
-        batch_size = mu.size(0)
-        eps = Variable(torch.FloatTensor(np.random.normal(0, 1, (batch_size, self.latent_dim)))).to(mu.device)
-        return eps * sigma + mu
 
 
 class Decoder(nn.Module):
