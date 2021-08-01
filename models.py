@@ -5,58 +5,97 @@ import math
 from torch.nn import functional as F
 
 class Encoder(nn.Module):
-    def __init__(self, latent_dim, image_shape):
+    def __init__(self, nz, image_size):
         super(Encoder, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(int(np.prod(image_shape)), 128),
+        nc = 3
+        nf=32
+        self.net = nn.Sequential(
+            nn.Conv2d(nc, nf, 5, 2, 2, bias=False),
+            nn.BatchNorm2d(nf),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
+
+            nn.Conv2d(nf, nf*2, 5, 2, 2, bias=False),
+            nn.BatchNorm2d(nf*2),
             nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Conv2d(nf*2, nf*4, 5, 2, 2, bias=False),
+            nn.BatchNorm2d(nf*4),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Flatten(),
+            nn.Linear(in_features=4*4*nf*4, out_features=1024),
+            nn.BatchNorm1d(num_features=1024),
+            nn.LeakyReLU(0.2, inplace=True)
         )
+        self.mu = nn.Linear(in_features=1024, out_features=nz)
+        #self.var = nn.Linear(in_features=1024, out_features=nz)
 
-        self.mu = nn.Linear(64, latent_dim)
-        self.sigma = nn.Linear(64, latent_dim)
-        self.latent_dim = latent_dim
+    def forward(self, input):
+        y =  self.net(input)
+        return self.mu(y)#, self.var(y)
 
-    def forward(self, x):
-        x_flat = x.view(x.shape[0], -1)
-        mu, sigma = self.encode(x_flat)
-        z_posterior = self.reparameterize(mu, sigma)
-        return z_posterior
+class Mapping(nn.Module) : 
+    def __init__(self, nz, linear_num) : 
+        super(Mapping, self).__init__()
+        
+        linear = nn.ModuleList()
+        for i in range(linear_num) : 
+            linear.append( nn.Linear(in_features=nz, out_features=nz) )
+            linear.append( nn.ELU() )
+        self.linear = linear
+        
+    def forward(self, input):
+        for layer in self.linear : 
+            input = layer(input)
+        return input
+        
+        
 
-    def encode(self, x):
-        x = self.model(x)
-        mu = self.mu(x)
-        sigma = self.sigma(x)
-        return mu, sigma
-
-    def reparameterize(self, mu, sigma):
-        from torch.autograd import Variable
-        batch_size = mu.size(0)
-        eps = Variable(torch.FloatTensor(np.random.normal(0, 1, (batch_size, self.latent_dim)))).to(mu.device)
-        return eps * sigma + mu
-
-
+class Unflatten(nn.Module):
+    def __init__(self, shape):
+        super(Unflatten, self).__init__()
+        self.shape = shape
+        
+    def forward(self, input):
+        return input.view(len(input), self.shape[0], self.shape[1], self.shape[2])
+    
 class Decoder(nn.Module):
-    def __init__(self, latent_dim, image_shape):
+    def __init__(self, nz, image_size, linear_add=0):
+        nc = 3
+        nf= 32
         super(Decoder, self).__init__()
-
-        self.model = nn.Sequential(
-            nn.Linear(latent_dim, 64),
+        
+        linear = nn.ModuleList()
+        for i in range(linear_add) : 
+            linear.append( nn.Linear(in_features=nz, out_features=nz) )
+            linear.append( nn.ReLU() )
+        self.linear = linear
+        
+        self.net = nn.Sequential(
+            nn.Linear(in_features=nz, out_features=4*4*nf*4),
+            Unflatten((128, 4, 4)),
+            
+            # add output_padding=1 to ConvTranspose2d to reconstruct original size
+            nn.ConvTranspose2d(nf*4, nf*2, 5, 2, 2, 1, bias=False),
+            nn.BatchNorm2d(nf*2),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(64, 128),
-            nn.BatchNorm1d(128),
+            
+            nn.ConvTranspose2d(nf*2, nf, 5, 2, 2, 1, bias=False),
+            nn.BatchNorm2d(nf),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(128, int(np.prod(image_shape))),
-            nn.Tanh(),
+            
+            nn.ConvTranspose2d(nf, int(nf/2), 5, 2, 2, 1, bias=False),
+            nn.BatchNorm2d(int(nf/2)),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(int(nf/2), nc, 5, 1, 2, 1, bias=False),
+            nn.Tanh()
         )
-        self.image_shape = image_shape
-
-    def forward(self, z_posterior):
-        decoded_flat = self.model(z_posterior)
-        decoded = decoded_flat.view(decoded_flat.shape[0], *self.image_shape)
-        return decoded
+    def forward(self, input):
+        for layer in self.linear : 
+            input = layer(input)
+        
+        return self.net(input)
 
 
 class Discriminator(nn.Module):
@@ -243,37 +282,56 @@ class Mod2Decoder(nn.Module):
         decoded = decoded_flat.view(decoded_flat.shape[0], *self.image_shape)
         return decoded
 
-class StackDecoder(nn.Module):
-    def __init__(self, latent_dim, image_shape):
-        super(StackDecoder, self).__init__()
 
-        self.model = nn.Sequential(
+class StackDecoder(nn.Module):
+    def __init__(self, nz, image_size):
+        nc = 3
+        nf= 32
+        latent_dim = nz
+        super(StackDecoder, self).__init__()
+        self.net = nn.Sequential(
             #mapping 
             nn.Linear(latent_dim, latent_dim),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
             nn.Linear(latent_dim, latent_dim),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
             nn.Linear(latent_dim, latent_dim),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
             nn.Linear(latent_dim, latent_dim),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
             ###
             
-            nn.Linear(latent_dim, 64),
+            nn.Linear(in_features=nz, out_features=4*4*nf*4),
+            nn.BatchNorm1d(num_features=4*4*nf*4),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(64, 128),
-            nn.BatchNorm1d(128),
+            Unflatten((128, 4, 4)),
+            
+            # add output_padding=1 to ConvTranspose2d to reconstruct original size
+            nn.ConvTranspose2d(nf*4, nf*2, 5, 2, 2, 1, bias=False),
+            nn.BatchNorm2d(nf*2),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(128, int(np.prod(image_shape))),
-            nn.Tanh(),
+            
+            nn.ConvTranspose2d(nf*2, nf, 5, 2, 2, 1, bias=False),
+            nn.BatchNorm2d(nf),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.ConvTranspose2d(nf, int(nf/2), 5, 2, 2, 1, bias=False),
+            nn.BatchNorm2d(int(nf/2)),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(int(nf/2), nc, 5, 1, 2, 1, bias=False),
+            nn.Tanh()
         )
-        self.image_shape = image_shape
-
-    def forward(self, z_posterior):
-        decoded_flat = self.model(z_posterior)
-        decoded = decoded_flat.view(decoded_flat.shape[0], *self.image_shape)
-        return decoded
-
+    def forward(self, input):
+        return self.net(input)    
+    
+    
+    
+    
+    
+    
+    
+    
 class GME_Encoder(nn.Module):
     def __init__(self, latent_dim, image_shape):
         super(GME_Encoder, self).__init__()

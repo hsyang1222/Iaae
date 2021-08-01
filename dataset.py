@@ -5,7 +5,7 @@ from torchvision import transforms
 
 
 def get_celebA_dataset(batch_size, img_size, mini=False):
-    image_path = "../data/"
+    image_path = "../../dataset/"
     '''
     transformation = transforms.Compose([transforms.Resize(image_size),
                                             transforms.CenterCrop(image_size), 
@@ -27,17 +27,18 @@ def get_celebA_dataset(batch_size, img_size, mini=False):
                                    transforms.Resize((img_size,img_size)),
                                    transforms.CenterCrop(img_size), 
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
                                ]))
     data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return train_loader
 
 
 def get_ffhq_thumbnails(batch_size, image_size):
-    image_path = "../data/"
+    image_path = "../dataset/"
     transformation = transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
+       transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
     ])
     train_dataset = torchvision.datasets.ImageFolder(image_path + 'FFHQ/', transformation)
     num_train = len(train_dataset)
@@ -84,59 +85,59 @@ def get_lsun_dataset(batch_size, image_size, classes) :
                                             transforms.Resize(image_size),
                                             transforms.CenterCrop(image_size), 
                                             transforms.ToTensor(), 
-                                            transforms.Normalize((0.5, 0.5, 0.5),
-                                            (0.5, 0.5, 0.5)),  ]))
+                                            transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
+                                        ]))
     
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return train_loader
 
 def get_mnist_dataset(batch_size, img_size) : 
-    image_path = "../data"
+    image_path = "../../dataset"
     dataset = torchvision.datasets.MNIST(root=image_path, download=True,
                                transform=transforms.Compose([
                                    transforms.Grayscale(3),
                                    transforms.Resize((img_size,img_size)),
                                    transforms.CenterCrop(img_size), 
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
                                ]))
     data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 def get_mnist_fashion_dataset(batch_size, img_size) : 
-    image_path = "../data"
+    image_path = "../../dataset"
     dataset = torchvision.datasets.FashionMNIST(root=image_path, download=True,
                                transform=transforms.Compose([
                                    transforms.Grayscale(3),
                                    transforms.Resize((img_size,img_size)),
                                    transforms.CenterCrop(img_size), 
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
                                ]))
     data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 def get_emnist_dataset(batch_size, img_size) : 
-    image_path = "../data"
+    image_path = "../../dataset"
     dataset = torchvision.datasets.EMNIST(root=image_path, download=True, split='balanced',
                                transform=transforms.Compose([
                                    transforms.Grayscale(3),
                                    transforms.Resize((img_size,img_size)),
                                    transforms.CenterCrop(img_size), 
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
                                ]))
     data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
 
 def get_cifar1_dataset(batch_size, img_size) : 
-    image_path = "../data"
+    image_path = "../../dataset"
     dataset = torchvision.datasets.CIFAR10(root=image_path,  download=True,
                                transform=transforms.Compose([
                                    transforms.Resize((img_size,img_size)),
                                    transforms.CenterCrop(img_size), 
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
                                ]))
     data = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data
