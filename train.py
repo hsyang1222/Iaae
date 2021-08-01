@@ -10,18 +10,54 @@ def update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder):
     r_loss = pixelwise_loss(X_decoded, X_train_batch)
     r_loss.backward()
     ae_optimizer.step()
-    return r_loss
+    return r_loss.item()
 
-
-def update_discriminator(d_optimizer, X_train_batch, encoder, discriminator, latent_dim):
-    d_optimizer.zero_grad()
-    batch_size = X_train_batch.size(0)
-    z_prior = Variable(torch.FloatTensor(np.random.normal(0, 1, (batch_size, latent_dim)))).to(X_train_batch.device)
-    z_posterior = encoder(X_train_batch)
-    d_loss = -torch.mean(torch.log(discriminator(z_prior)) + torch.log(1 - discriminator(z_posterior)))
-    d_loss.backward()
+def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim) :
+    
+    batch_size = real_image.size(0)
+    device = real_image.device
+    bce = torch.nn.BCELoss()
+    
+    label_one = torch.ones(batch_size, 1, device=device)
+    label_zero = torch.zeros(batch_size, 1, device=device)
+    
+    encoded_real = encoder(real_image)
+    d_predict_encoded_real = discriminator(encoded_real)    
+    loss_d_e_real = bce(d_predict_encoded_real, label_one)
+    
+    gaussian_noise = torch.randn(batch_size, latent_dim, device=device)
+    mapping_fake = mapper(gaussian_noise)
+    d_predict_mapping_fake = discriminator(mapping_fake)
+    loss_d_m_fake = bce(d_predict_mapping_fake, label_zero)
+    
+    d_optimizer.zero_grad()    
+    loss_d = loss_d_e_real + loss_d_m_fake
+    loss_d.backward()
     d_optimizer.step()
-    return d_loss.data
+    
+    return loss_d.item()
+    
+def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim) : 
+    batch_size = real_image.size(0)
+    device = real_image.device
+    bce = torch.nn.BCELoss()
+    
+    label_one = torch.ones(batch_size, 1, device=device)
+    
+    gaussian_noise = torch.randn(batch_size, latent_dim, device=device)
+    mapping_fake = mapper(gaussian_noise)
+    d_predict_mapping_fake = discriminator(mapping_fake)
+    loss_d_m_fake = bce(d_predict_mapping_fake, label_one)
+    
+    m_optimizer.zero_grad()
+    loss_m = loss_d_m_fake
+    loss_m.backward()
+    m_optimizer.step()
+    
+    return loss_m.item()
+    
+    
+    
 
 
 def update_generator(g_optimizer, X_train_batch, encoder, discriminator):

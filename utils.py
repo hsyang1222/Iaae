@@ -6,13 +6,32 @@ from torch.autograd import Variable
 import numpy as np
 from PIL import Image
 
+import seaborn as sns
+def pca_kde(real, test, dim=1) : 
+    plt.clf()
+    
+    real_fake = torch.cat([real, test])
+    U, S, V = torch.pca_lowrank(real_fake)
+    
+    pca1 = torch.matmul(real, V[:, :dim])
+    pca2 = torch.matmul(test, V[:, :dim])
+    sns.kdeplot(pca1.flatten().numpy(), label='mapper input')
+    plot = sns.kdeplot(pca2.flatten().numpy(), label='mapper output')
+    plot.legend()
+    return plot
+
 def sample_image(encoder, decoder, x):
     z = encoder(x)
     return decoder(z)
 
-def inference_image(decoder, batch_size, latent_dim, device) :
+def inference_image(mapper, decoder, batch_size, latent_dim, device) :
     z = torch.randn(batch_size, latent_dim).to(device)
-    return decoder(z)
+    return decoder(mapper(z)).detach().cpu()
+
+import torchvision.utils as vutils
+def get_fixed_z_image_np(fake_image, nrow=8) : 
+    fake_np = vutils.make_grid(fake_image.detach().cpu(), nrow).permute(1,2,0).numpy()
+    return fake_np  
 
 def save_losses(epochs, save_calculation_interval, r_losses, d_losses, g_losses):
     X = range(1, epochs + 1, save_calculation_interval)
