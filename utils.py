@@ -7,18 +7,28 @@ import numpy as np
 from PIL import Image
 
 import seaborn as sns
-def pca_kde(real, test, dim=1) : 
+def pca_kde(real, test, encoded, dim=1) : 
     plt.clf()
     
-    real_fake = torch.cat([real, test])
-    U, S, V = torch.pca_lowrank(real_fake)
+    all_data = torch.cat([real, test, encoded])
+    U, S, V = torch.pca_lowrank(all_data)
     
     pca1 = torch.matmul(real, V[:, :dim])
     pca2 = torch.matmul(test, V[:, :dim])
-    sns.kdeplot(pca1.flatten().numpy(), label='mapper input')
-    plot = sns.kdeplot(pca2.flatten().numpy(), label='mapper output')
+    pca3 = torch.matmul(encoded, V[:, :dim])
+    sns.kdeplot(pca1.flatten().numpy(), label='z')
+    sns.kdeplot(pca2.flatten().numpy(), label='M(z)')
+    plot = sns.kdeplot(pca3.flatten().numpy(), label='E(x)')
     plot.legend()
     return plot
+
+def get_encoded_data(train_loader, encoder, device, size=2048) : 
+    data, label = next(iter(train_loader))
+    assert data.size(0) == size, "not impl"
+    data_cuda = data.to(device)
+    with torch.no_grad() : 
+        encoded_data = encoder(data_cuda)
+        return encoded_data.cpu()
 
 def sample_image(encoder, decoder, x):
     z = encoder(x)

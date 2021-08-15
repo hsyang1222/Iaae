@@ -153,6 +153,8 @@ def main(args):
         #print(i, loss_r.item())
         if args.run_test : break
     
+    
+    
     if args.latent_layer > 0 :
         encoder.eval()
         for i in range(0, args.train_m) : 
@@ -204,18 +206,20 @@ def main(args):
             encoder = encoder.to(device)
             decoder = decoder.to(device)
             
+            
             mapper_test_data = torch.randn(2048, 100)
+            real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)
             if args.latent_layer > 0 : 
                 mapper_out_data = mapper(mapper_test_data).detach()
                 mapper = mapper.to(device)
             else : 
                 mapper_out_data = mapper_test_data
-            mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data))
+            mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data))
             
             discriminator = discriminator.to(device)
             
             metrics.update({
-                       "fake_image" :[wandb.Image(fixed_fake_image, caption='fixed z image')],
+                       "fake_image" :wandb.Image(fixed_fake_image, caption='fixed z image'),
                        "mapper_inout(pca 1dim)" : mapper_input_out_plot,
                         'loss_r' : loss_r,
                         'loss_d': loss_d,
