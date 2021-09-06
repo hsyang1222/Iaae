@@ -32,7 +32,7 @@ class Encoder(nn.Module):
 
     def forward(self, input):
         y =  self.net(input)
-        return self.mu(y)#, self.var(y)
+        return torch.sigmoid(self.mu(y))#, self.var(y)
 
 class Mapping(nn.Module) : 
     def __init__(self, nz, linear_num) : 
@@ -48,7 +48,26 @@ class Mapping(nn.Module) :
         for layer in self.linear : 
             input = layer(input)
         return input
+
+# stack version
+class PointMapping(nn.Module) : 
+    def __init__(self, nz, linear_num) : 
+        super(oneMapping, self).__init__()
         
+        linear = nn.ModuleList()
+        for i in range(linear_num) : 
+            in_features = nz
+            out_features = nz
+            if i == 0 : in_features = 1
+            if i== linear_num-1 : out_features=1
+            linear.append( nn.Linear(in_features=in_features, out_features=out_features) )
+            if i!=linear_num-1 : linear.append( nn.ELU() )
+        self.linear = linear
+        
+    def forward(self, input):
+        for layer in self.linear : 
+            input = layer(input)
+        return input
         
 
 class Unflatten(nn.Module):

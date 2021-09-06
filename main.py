@@ -58,6 +58,13 @@ def main(args):
         encoder = Encoder(latent_dim, image_shape).to(device)
         decoder = Decoder(latent_dim, image_shape).to(device)
         discriminator = Discriminator(latent_dim).to(device)
+        
+        ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
+        d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
+    elif model_name in ['ulearning'] : 
+        encoder = Encoder(latent_dim, image_shape).to(device)
+        decoder = Decoder(latent_dim, image_shape).to(device)
+        ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
 
 
     ###########################################
@@ -135,10 +142,7 @@ def main(args):
     '''
     customize
     '''
-    
-
-    ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
-    d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
+   
     if args.latent_layer > 0 : 
         mapper = Mapping(latent_dim, args.latent_layer).to(device)
         m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
@@ -153,36 +157,63 @@ def main(args):
         #print(i, loss_r.item())
         if args.run_test : break
     
-    
-    
+    #pretrain M layer
     if args.latent_layer > 0 :
         encoder.eval()
-        for i in range(0, args.train_m) : 
-            for each_batch, label in tqdm.tqdm(train_loader, desc='train M[%d/%d]' % (i, args.train_m)) :
-                real_image = each_batch.to(device)
-                loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
-                loss_m = update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim)
-                if args.run_test : break
-            if args.run_test :break
-        encoder.train()
-            
+        if model_name == 'ulearning' : 
 
+            feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
+
+            for i in range(0, args.train_m) : 
+                for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='train M[%d/%d]' % (i, args.train_m)) :
+                    uniform_input_cuda = each_batch.to(device)
+                    encoded_feature_cuda = label_feature.to(device)
+                    loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
+                if args.run_test : break
+        if model_name == 'vanilla': 
+           
+            for i in range(0, args.train_m) : 
+                for each_batch, label in tqdm.tqdm(train_loader, desc='train M[%d/%d]' % (i, args.train_m)) :
+                    real_image = each_batch.to(device)
+                    loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+                    loss_m = update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
+                    if args.run_test : break
+                if args.run_test :break
+                    
+        encoder.train()
+           
+
+    # train phase        
     for i in range(0, epochs):
         for each_batch, label in tqdm.tqdm(train_loader, desc='train IAAE[%d/%d]' % (i, epochs)):
             real_image = each_batch.to(device)
             loss_r = update_autoencoder(ae_optimizer, real_image, encoder, decoder)
-            loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
-            if args.latent_layer > 0 : 
-                loss_m =  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim)
+            if model_name == 'vanilla' : 
+                loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+            else : 
+                loss_d = 0.
+            if args.latent_layer > 0 and model_name == 'vanilla' : 
+                loss_m =  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
             else : 
                 loss_m = 0.
-            
-            
-            if i % save_image_interval == 0:
-                    sampled_images = inference_image(mapper, decoder, batch_size=real_image.size(0), latent_dim=latent_dim, device=device)
-                    inception_model_score.put_fake(sampled_images)
-
             if args.run_test : break
+        
+        if model_name == 'ulearning' and i % args.train_m_interval == 0 :
+            feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
+            for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='train M[%d/%d]' % (i, epochs)) :
+                uniform_input_cuda = each_batch.to(device)
+                encoded_feature_cuda = label_feature.to(device)
+                loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
+            if args.run_test : break
+            
+       
+        if i % save_image_interval == 0:
+            for each_batch, label in tqdm.tqdm(train_loader, desc='generate image[%d/%d]' % (i, epochs)):    
+                if model_name == 'vanilla' : 
+                    sampled_images = inference_image(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
+                if model_name == 'ulearning' :
+                    sampled_images = inference_image_ulver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
+                inception_model_score.put_fake(sampled_images)    
         
         if i % save_image_interval == 0:
             
@@ -192,7 +223,8 @@ def main(args):
             encoder = encoder.to('cpu')
             decoder = decoder.to('cpu')
             if args.latent_layer > 0 : mapper = mapper.to('cpu')
-            discriminator = discriminator.to('cpu')
+            if model_name == 'vanilla' : 
+                discriminator = discriminator.to('cpu')
             inception_model_score.model_to(device)
             
             #generate fake images info
@@ -206,8 +238,10 @@ def main(args):
             encoder = encoder.to(device)
             decoder = decoder.to(device)
             
-            
-            mapper_test_data = torch.randn(2048, 100)
+            if model_name == 'vanilla' : 
+                mapper_test_data = torch.randn(2048, 100)
+            else : 
+                mapper_test_data = torch.rand(2048,100)
             real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)
             if args.latent_layer > 0 : 
                 mapper_out_data = mapper(mapper_test_data).detach()
@@ -215,12 +249,15 @@ def main(args):
             else : 
                 mapper_out_data = mapper_test_data
             mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data))
+            feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
             
-            discriminator = discriminator.to(device)
+            if model_name == 'vanilla' : 
+                discriminator = discriminator.to(device)
             
             metrics.update({
-                       "fake_image" :wandb.Image(fixed_fake_image, caption='fixed z image'),
+                       "fake_image" :[wandb.Image(fixed_fake_image, caption='fixed z image')],
                        "mapper_inout(pca 1dim)" : mapper_input_out_plot,
+                       "feature_kde" : [wandb.Image(plt) for plt in feature_kde],
                         'loss_r' : loss_r,
                         'loss_d': loss_d,
                         'loss_m': loss_m,
@@ -249,7 +286,10 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='cifar10', choices=['LSUN_dining_room', 'LSUN_classroom', 'LSUN_conference', 'LSUN_churches',
                                                                     'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 
-    parser.add_argument('--model_name', type=str, default='vanilla', choices=['vanilla'])
+    parser.add_argument('--model_name', type=str, default='vanilla', choices=['vanilla', 'ulearning', 'std_learning'])
+    parser.add_argument('--std_maximize', type=bool, default=False)
+    parser.add_argument('--std_alpha', type=float, default=0.1)
+    parser.add_argument('--train_m_interval', type=int, default=1)
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)

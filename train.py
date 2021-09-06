@@ -12,6 +12,17 @@ def update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder):
     ae_optimizer.step()
     return r_loss.item()
 
+def update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper) :
+    mse = torch.nn.MSELoss()
+    predict_feature = mapper(uniform_input_cuda)
+    loss_m = mse(predict_feature, encoded_feature_cuda)
+    m_optimizer.zero_grad()
+    loss_m.backward()
+    m_optimizer.step()
+    
+    return loss_m.item()
+
+
 def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim) :
     
     batch_size = real_image.size(0)
@@ -37,7 +48,7 @@ def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator
     
     return loss_d.item()
     
-def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim) : 
+def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, std_maximize=False, std_alpha=0.1) : 
     batch_size = real_image.size(0)
     device = real_image.device
     bce = torch.nn.BCELoss()
@@ -49,8 +60,15 @@ def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim) :
     d_predict_mapping_fake = discriminator(mapping_fake)
     loss_d_m_fake = bce(d_predict_mapping_fake, label_one)
     
+    #cal std loss
+    if std_maximize : 
+        to_maximize = torch.mean(torch.std(mapping_fake, dim=1))
+        loss_m_std = -to_maximize * std_alpha
+    else : 
+        loss_m_std = 0.
+    
     m_optimizer.zero_grad()
-    loss_m = loss_d_m_fake
+    loss_m = loss_d_m_fake + loss_m_std
     loss_m.backward()
     m_optimizer.step()
     

@@ -22,6 +22,52 @@ def pca_kde(real, test, encoded, dim=1) :
     plot.legend()
     return plot
 
+def make_feature_plt(z, M_z, E_x, fnum) : 
+    fig1, ax1 = plt.subplots()
+    sns.kdeplot(z, label='z', ax=ax1)
+    sns.kdeplot(E_x, label='E(x)', ax=ax1)
+    sns.kdeplot(M_z, label='M(z)', ax=ax1)
+    ax1.legend()
+    ax1.set_title('feature ' + str(fnum))
+    return fig1
+
+
+def feature_plt_list(z, M_z, E_x) : 
+    plt.clf()
+    plt_list = []
+    assert z.size(1) == M_z.size(1) and M_z.size(1) == E_x.size(1)
+    for i in range(z.size(1)) :
+        plt_list.append(make_feature_plt(z[:,i], M_z[:,i], E_x[:,i], i))
+        
+    return plt_list
+
+def make_ulearning_dsl(original_train_loader, encoder, device, batch_size):
+    encoded_data_list = []
+    encoder.eval()
+    for each_batch, label in original_train_loader :
+        real_image_cuda = each_batch.to(device)
+        with torch.no_grad() :            
+            encoded_feature = encoder(real_image_cuda).detach().cpu()
+            encoded_data_list.append(encoded_feature)
+    encoded_feature_tensor = torch.cat(encoded_data_list)
+
+    #각 차원의 feature를 각 차원별로 sort한 tensor가 필요함
+    sorted_encoded_feature_tensor = encoded_feature_tensor.clone()
+    for each_dim in range(sorted_encoded_feature_tensor.size(1)) : 
+        sorted_encoded_feature_tensor[:,each_dim] = torch.sort(encoded_feature_tensor[:,each_dim])[0]
+
+    uniform_input = torch.empty(sorted_encoded_feature_tensor.shape)
+    for each_dim in range(sorted_encoded_feature_tensor.size(1)) : 
+        uniform_input[:,each_dim] = torch.linspace(0,1,sorted_encoded_feature_tensor.size(0))
+
+
+    feature_tensor_ds = torch.utils.data.TensorDataset(uniform_input, sorted_encoded_feature_tensor)
+    feature_tensor_dloader = torch.utils.data.DataLoader(feature_tensor_ds, batch_size=batch_size, shuffle=True)
+                       
+    encoder.train()
+    return feature_tensor_dloader
+
+
 def get_encoded_data(train_loader, encoder, device, size=2048) : 
     data, label = next(iter(train_loader))
     assert data.size(0) == size, "not impl"
@@ -35,7 +81,13 @@ def sample_image(encoder, decoder, x):
     return decoder(z)
 
 def inference_image(mapper, decoder, batch_size, latent_dim, device) :
+    # normal distribution
     z = torch.randn(batch_size, latent_dim).to(device)
+    return decoder(mapper(z)).detach().cpu()
+
+def inference_image_ulver(mapper, decoder, batch_size, latent_dim, device) :
+    # uniform distribution
+    z = torch.rand(batch_size, latent_dim).to(device)
     return decoder(mapper(z)).detach().cpu()
 
 import torchvision.utils as vutils
