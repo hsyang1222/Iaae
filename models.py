@@ -52,7 +52,7 @@ class Mapping(nn.Module) :
 # stack version
 class PointMapping(nn.Module) : 
     def __init__(self, nz, linear_num) : 
-        super(oneMapping, self).__init__()
+        super(PointMapping, self).__init__()
         
         linear = nn.ModuleList()
         for i in range(linear_num) : 
@@ -69,7 +69,45 @@ class PointMapping(nn.Module) :
             input = layer(input)
         return input
         
-
+class EachLatentMapping(nn.Module) : 
+    def __init__(self, nz, inter_nz, linear_num) :
+        super(EachLatentMapping, self).__init__()
+        
+        pm_list = nn.ModuleList()
+        for i in range(nz) : 
+            pm = PointMapping(inter_nz, linear_num)
+            pm_list.append(pm)
+        
+        self.pm_list = pm_list
+        self.nz = nz
+    
+    def forward(self, x) : 
+        assert x.size(1) == self.nz
+        
+        predict_out_list = []
+        for each_nz in range(self.nz) : 
+            each_nz_x = x[:, each_nz].view(-1,1)
+            predict = self.pm_list[each_nz](each_nz_x)
+            
+            predict_out_list.append(predict)
+        
+        predict_out = torch.cat(predict_out_list, dim=1)
+        return predict_out
+        
+    def point_forward(self, nz_where, x) : 
+        each_nz_x = x.view(-1,1)
+        predict = self.pm_list[nz_where](each_nz_x)
+        return predict
+    
+    def get_optimizer_list(self, optim_class, **kwargs) : 
+        optim_list = []
+        #print(**kwargs)
+        for i in range(self.nz) : 
+            optim_list.append(optim_class(self.pm_list[i].parameters(), **kwargs))
+        return optim_list
+    
+    
+    
 class Unflatten(nn.Module):
     def __init__(self, shape):
         super(Unflatten, self).__init__()

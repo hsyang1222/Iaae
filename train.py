@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Variable
 import numpy as np
+import tqdm
 
 def update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder):
     ae_optimizer.zero_grad()
@@ -21,6 +22,62 @@ def update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cu
     m_optimizer.step()
     
     return loss_m.item()
+
+def update_mapping_ulearning_point(mapper, x, target, go_under_loss, device, print_every=-1) :
+    mse = torch.nn.MSELoss()
+    nz = mapper.nz
+    loss_list = torch.zeros(nz)
+    
+    mse = torch.nn.MSELoss()
+    nz = mapper.nz
+    loss_list = torch.zeros(nz)
+    
+    for each_nz in tqdm.tqdm(range(nz), desc='train M_p'):
+
+        mapper.zero_grad()
+        
+        focus_x = x[:,each_nz].view(-1,1).to(device)
+        focus_mapper = mapper.pm_list[each_nz]
+        focus_optimizer = torch.optim.Adam(focus_mapper.parameters(), lr=1e-2, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(focus_optimizer, gamma=0.9995)
+        focus_target = target[:,each_nz].sort()[0].view(-1,1).to(device)
+
+        last_loss = go_under_loss + 1
+        step = 0
+
+        while last_loss >= go_under_loss :
+            predict = focus_mapper(focus_x)
+            last_loss = mse(predict, focus_target)
+
+            focus_optimizer.zero_grad()
+            last_loss.backward()
+            focus_optimizer.step()
+            scheduler.step()
+
+            step += 1
+            if print_every>0 and (step % print_every == 0 or last_loss < go_under_loss):
+                print("dim:%d, step:%d, go to under loss : %f, current loss:%f, lr:%f" % \
+                      (each_nz, step, go_under_loss, last_loss, scheduler.get_last_lr()[0]))
+
+                '''
+                predict_encoded = predict.detach().cpu()
+
+                plt.plot(focus_x.cpu(), focus_target.cpu(), label='E(x)')
+                plt.plot(focus_x.cpu(), predict_encoded, label='M(0~1)')
+                plt.xlabel("input feature ~ U[1,0]")
+                plt.ylabel('latent z')
+                plt.title("dim:%d, step:%d, loss:%f, lr=%f" % (each_nz, step, last_loss.item(), scheduler.get_last_lr()[0]))
+                plt.legend()
+                plt.show()
+
+                sns.kdeplot(focus_target.detach().cpu().flatten(), label='E(x)')
+                sns.kdeplot(predict_encoded.flatten(), label='M(0~1)')
+                plt.title("dim:%d, step:%d, loss:%f, lr=%f" % (each_nz, step, last_loss.item(), scheduler.get_last_lr()[0]))
+                plt.legend()
+                plt.show()
+                '''
+        
+    return loss_list
 
 
 def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim) :

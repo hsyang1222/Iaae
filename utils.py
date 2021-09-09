@@ -7,6 +7,31 @@ import numpy as np
 from PIL import Image
 
 import seaborn as sns
+
+def make_fixed_z(model_name, latent_dim, device):
+    if model_name in ['vanilla', 'pointMapping_but_aae'] :
+        z = torch.randn(8 ** 2, latent_dim, device=device)
+    elif model_name in ['ulearning'] : 
+        z = torch.rand(8 ** 2, latent_dim, device=device)
+    elif model_name in ['ulearning_point']:
+        z = z = torch.rand(8**2, latent_dim, device=device) * 2 -1 
+    return z
+
+def make_mapper_out(model_name, mapper, latent_dim, latent_layer, device) : 
+    if model_name in ['vanilla', 'pointMapping_but_aae'] :
+        mapper_test_data = torch.randn(2048, latent_dim, device=device)
+    elif model_name in ['ulearning'] :
+        mapper_test_data = torch.rand(2048,latent_dim, device=device)
+    elif model_name in ['ulearning_point']:
+        mapper_test_data = torch.rand(2048, latent_dim, device=device) * 2 -1
+    if latent_layer > 0 : 
+        with torch.no_grad():
+            mapper_out_data = mapper(mapper_test_data)
+    else : 
+        mapper_out_data = mapper_test_data
+    return mapper_test_data.cpu(), mapper_out_data.cpu()
+    
+
 def pca_kde(real, test, encoded, dim=1) : 
     plt.clf()
     
@@ -40,6 +65,28 @@ def feature_plt_list(z, M_z, E_x) :
         plt_list.append(make_feature_plt(z[:,i], M_z[:,i], E_x[:,i], i))
         
     return plt_list
+
+def make_encoded_feature_tensor(encoder, train_loader, device):
+    encoded_data_list = []
+    for each_batch, label in train_loader :
+        real_image_cuda = each_batch.to(device)
+        with torch.no_grad() :            
+            encoded_feature = encoder(real_image_cuda).detach().cpu()
+            encoded_data_list.append(encoded_feature)
+    encoded_feature_tensor = torch.cat(encoded_data_list)
+    return encoded_feature_tensor
+
+def make_sorted_encoded_feature_tensor(encoded_feature_tensor) : 
+    sorted_encoded_data = encoded_feature_tensor[:,0].sort()[0].view(-1,1)
+    return sorted_encoded_data
+
+def make_linspace_tensor(data):
+    linspace_list = []
+    for i in range(data.size(1)) : 
+        linspace_list.append(torch.linspace(-1,1,data.size(0)).view(-1,1))
+    linspace = torch.cat(linspace_list,dim=1)
+    return linspace
+
 
 def make_ulearning_dsl(original_train_loader, encoder, device, batch_size):
     encoded_data_list = []
@@ -90,8 +137,17 @@ def inference_image_ulver(mapper, decoder, batch_size, latent_dim, device) :
     z = torch.rand(batch_size, latent_dim).to(device)
     return decoder(mapper(z)).detach().cpu()
 
+def inference_image_ulpver(mapper, decoder, batch_size, latent_dim, device) :
+    # uniform distribution
+    with torch.no_grad():
+        z = torch.rand(batch_size, latent_dim).to(device) * 2 -1
+        result=decoder(mapper(z)).detach().cpu()
+    return result 
+
+
 import torchvision.utils as vutils
 def get_fixed_z_image_np(fake_image, nrow=8) : 
+    fake_image = fake_image * 0.5 + 0.5
     fake_np = vutils.make_grid(fake_image.detach().cpu(), nrow).permute(1,2,0).numpy()
     return fake_np  
 
