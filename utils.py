@@ -5,8 +5,86 @@ from torchvision.utils import save_image
 from torch.autograd import Variable
 import numpy as np
 from PIL import Image
+import tqdm
+import gc
 
 import seaborn as sns
+
+def insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score) : 
+    model_name = args.model_name
+    latent_dim = args.latent_dim
+    device = args.device
+    
+    for each_batch, label in tqdm.tqdm(train_loader, desc='generate info_image[%d/%d]' % (i, epochs)):    
+        with torch.no_grad():
+            if model_name in ['vanilla', 'pointMapping_but_aae'] : 
+                sampled_images = inference_image(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
+            if model_name == 'ulearning' :
+                sampled_images = inference_image_ulver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
+            if model_name == 'ulearning_point' :
+                sampled_images = inference_image_ulpver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
+            inception_model_score.put_fake(sampled_images) 
+        if args.run_test : break
+
+
+def gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score) : 
+    model_name = args.model_name
+    save_image_interval = args.save_image_interval
+    device = args.device
+
+    
+
+    #offload all GAN model to cpu and onload inception model to gpu
+    encoder = encoder.eval().to('cpu')
+    decoder = decoder.eval().to('cpu')
+    if args.latent_layer > 0 : mapper = mapper.eval().to('cpu')
+    if model_name in ['vanilla', 'pointMapping_but_aae']: 
+        discriminator = discriminator.eval().to('cpu')
+
+    inception_model_score.model_to(device)
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    #generate fake images info
+    inception_model_score.lazy_forward(batch_size=64, device=device, fake_forward=True)
+    inception_model_score.calculate_fake_image_statistics()
+    metrics, plot = inception_model_score.calculate_generative_score(feature_pca_plot=True)
+    metrics.update({'IsNet feature':wandb.Image(plot)})
+
+    #onload all GAN model to gpu and offload inception model to cpu
+    inception_model_score.model_to('cpu')
+    encoder = encoder.train().to(device)
+    decoder = decoder.train().to(device)
+    if args.latent_layer > 0 : mapper = mapper.train().to(device)
+    if model_name in ['vanilla', 'pointMapping_but_aae'] : 
+        discriminator = discriminator.to(device)
+
+    inception_model_score.clear_fake()
+    torch.cuda.empty_cache()
+        
+    return metrics
+
+def wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log) : 
+    latent_dim = args.latent_dim
+    model_name = args.model_name
+    
+    fixed_fake_image = get_fixed_z_image_np(decoder(mapper(fixed_z)))
+    
+    real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)                
+    mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, latent_dim, args.latent_layer, device) 
+
+    mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data))
+    feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
+
+    loss_log.update({
+               "fake_image" :[wandb.Image(fixed_fake_image, caption='fixed z image')],
+               "mapper_inout(pca 1dim)" : mapper_input_out_plot,
+               "feature_kde" : [wandb.Image(plt) for plt in feature_kde],
+              })
+  
+    wandb.log(loss_log, step=i)
+    
+        
 
 def make_fixed_z(model_name, latent_dim, device):
     if model_name in ['vanilla', 'pointMapping_but_aae'] :
@@ -129,13 +207,18 @@ def sample_image(encoder, decoder, x):
 
 def inference_image(mapper, decoder, batch_size, latent_dim, device) :
     # normal distribution
-    z = torch.randn(batch_size, latent_dim).to(device)
-    return decoder(mapper(z)).detach().cpu()
+    with torch.no_grad() : 
+        z = torch.randn(batch_size, latent_dim).to(device)
+        z = torch.sigmoid(z)
+        result = decoder(mapper(z)).detach().cpu()
+    return result
 
 def inference_image_ulver(mapper, decoder, batch_size, latent_dim, device) :
     # uniform distribution
-    z = torch.rand(batch_size, latent_dim).to(device)
-    return decoder(mapper(z)).detach().cpu()
+    with torch.no_grad():    
+        z = torch.rand(batch_size, latent_dim).to(device)
+        result = decoder(mapper(z)).detach().cpu()
+    return result
 
 def inference_image_ulpver(mapper, decoder, batch_size, latent_dim, device) :
     # uniform distribution

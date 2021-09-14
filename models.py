@@ -8,7 +8,8 @@ class Encoder(nn.Module):
     def __init__(self, nz, image_size):
         super(Encoder, self).__init__()
         nc = 3
-        nf=32
+        nf=8
+        img_size = image_size[1]
         self.net = nn.Sequential(
             nn.Conv2d(nc, nf, 5, 2, 2, bias=False),
             nn.BatchNorm2d(nf),
@@ -23,7 +24,7 @@ class Encoder(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Flatten(),
-            nn.Linear(in_features=4*4*nf*4, out_features=1024),
+            nn.Linear(in_features=(nf*4)*(img_size//8)*(img_size//8), out_features=1024),
             nn.BatchNorm1d(num_features=1024),
             nn.LeakyReLU(0.2, inplace=True)
         )
@@ -119,8 +120,10 @@ class Unflatten(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, nz, image_size, linear_add=0):
         nc = 3
-        nf= 32
+        nf= 8
         super(Decoder, self).__init__()
+        
+        img_size = image_size[1]
         
         linear = nn.ModuleList()
         for i in range(linear_add) : 
@@ -129,8 +132,8 @@ class Decoder(nn.Module):
         self.linear = linear
         
         self.net = nn.Sequential(
-            nn.Linear(in_features=nz, out_features=4*4*nf*4),
-            Unflatten((128, 4, 4)),
+            nn.Linear(in_features=nz, out_features=(nf*4)*(img_size//8)*(img_size//8)),
+            Unflatten((nf*4, (img_size//8), (img_size//8))),
             
             # add output_padding=1 to ConvTranspose2d to reconstruct original size
             nn.ConvTranspose2d(nf*4, nf*2, 5, 2, 2, 1, bias=False),

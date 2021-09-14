@@ -154,30 +154,30 @@ class GenerativeModelScore:
     def put_real(self, real_images) : 
         if self.lazy : 
             if self.real_images is None : 
-                self.real_images = real_images
+                self.real_images = [real_images]
             else : 
-                self.real_images = torch.cat([self.real_images, real_images])
+                self.real_images.append(real_images)
         else : 
             self.real_forward(real_images)
             
             
     def real_forward(self, real_images):
-        real_predict_softmax, real_feature = self.analysis_softmax_and_feature(real_images)
-        if self.real_predict_softmax is None : 
-            self.real_predict_softmax = real_predict_softmax.detach().cpu()
-            self.real_feature = real_feature.detach().cpu()
-        else : 
-            self.real_predict_softmax = torch.cat([self.real_predict_softmax, real_predict_softmax.detach().cpu()])
-            self.real_feature = torch.cat([self.real_feature, real_feature.detach().cpu()])    
-                
+        with torch.no_grad() : 
+            real_predict_softmax, real_feature = self.analysis_softmax_and_feature(real_images)
+            if self.real_predict_softmax is None : 
+                self.real_predict_softmax = [real_predict_softmax.detach().cpu()]
+                self.real_feature = [real_feature.detach().cpu()]
+            else : 
+                self.real_predict_softmax.append(real_predict_softmax.detach().cpu())
+                self.real_feature.append(real_feature.detach().cpu())
   
         
     def put_fake(self, fake_images) : 
         if self.lazy : 
             if self.fake_images is None : 
-                self.fake_images = fake_images
+                self.fake_images = [fake_images]
             else : 
-                self.fake_images = torch.cat([self.fake_images, fake_images])
+                self.fake_images.append(fake_images)
         else:
             self.fake_forward(fake_images)
             
@@ -201,17 +201,17 @@ class GenerativeModelScore:
         import tqdm 
         
         if real_forward : 
+            if type(self.real_images) == list : self.real_images=torch.cat(self.real_images)
             real_dataset = TensorDataset(self.real_images)
             real_loader = DataLoader(real_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-            print("generate real images info")
-            for real_images in tqdm.tqdm(real_loader) : 
+            for real_images in tqdm.tqdm(real_loader, desc='ISNet-real') : 
                 self.real_forward(real_images[0].to(device))
         
         if fake_forward : 
+            if type(self.fake_images) == list : self.fake_images=torch.cat(self.fake_images)
             fake_dataset = TensorDataset(self.fake_images)
             fake_loader = DataLoader(fake_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-            print("generate fake images info")
-            for fake_images in tqdm.tqdm(fake_loader) :
+            for fake_images in tqdm.tqdm(fake_loader, 'ISNet-fake') :
                 self.fake_forward(fake_images[0].to(device))
             
     def save_real_images_info(self, file_name='real_images_info.pickle') : 
@@ -224,11 +224,17 @@ class GenerativeModelScore:
                 pickle.load(f)
             
     def calculate_real_image_statistics(self) : 
+        if type(self.real_predict_softmax) == list : self.real_predict_softmax = torch.cat(self.real_predict_softmax)
+        if type(self.real_feature) == list : self.real_feature = torch.cat(self.real_feature)
+        
         self.real_inception_score = self.predict_to_inception_score(self.real_predict_softmax)[0]
         self.real_feature_np = self.real_feature.view(-1, 2048).numpy()
         self.real_mu, self.real_sigma = self.feature_to_mu_sig(self.real_feature_np)        
     
     def calculate_fake_image_statistics(self) : 
+        if type(self.fake_predict_softmax) == list : self.real_predict_softmax = torch.cat(self.fake_predict_softmax)
+        if type(self.fake_feature) == list : self.fake_feature = torch.cat(self.fake_feature)
+            
         self.fake_inception_score = self.predict_to_inception_score(self.fake_predict_softmax)[0]
         self.fake_feature_np = self.fake_feature.view(-1, 2048).numpy()
         self.fake_mu, self.fake_sigma = self.feature_to_mu_sig(self.fake_feature_np)

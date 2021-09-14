@@ -2,6 +2,97 @@ import torch
 from torch.autograd import Variable
 import numpy as np
 import tqdm
+from utils import *
+
+
+def AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder):
+    for i in range(0, args.AE_iter) :
+        for each_batch, label in tqdm.tqdm(train_loader, desc='train AE[%d/%d]' % (i, args.AE_iter)) :
+            real_image = each_batch.to(device)
+            loss_r = update_autoencoder(ae_optimizer, real_image, encoder, decoder)
+            if args.run_test : break
+        #print(i, loss_r.item())
+        if args.run_test : break
+    
+def M_pretrain(args, train_loader, device, m_optimizer, mapper, encoder) :
+    #pretrain M layer
+    model_name = args.model_name
+    if args.latent_layer > 0 :
+        encoder.eval()
+        if model_name in ['ulearning'] : 
+
+            feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
+
+            for i in range(0, args.train_m) : 
+                for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='train M[%d/%d]' % (i, args.train_m)) :
+                    uniform_input_cuda = each_batch.to(device)
+                    encoded_feature_cuda = label_feature.to(device)
+                    loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
+                if args.run_test : break
+                    
+        if model_name in ['ulearning_point'] :     
+            encoded_feature_tensor = make_encoded_feature_tensor(encoder, train_loader, device)
+            linspace_tensor = make_linspace_tensor(encoded_feature_tensor)
+            
+            each_dim_final_loss = update_mapping_ulearning_point( mapper, linspace_tensor, \
+                                           encoded_feature_tensor, args.u_lr_min, device, print_every=-1)
+            loss_m = torch.max(each_dim_final_loss)
+
+        if model_name in ['vanilla', 'pointMapping_but_aae'] :
+            for i in range(0, args.train_m) : 
+                for each_batch, label in tqdm.tqdm(train_loader, desc='train M[%d/%d]' % (i, args.train_m)) :
+                    real_image = each_batch.to(device)
+                    loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+                    loss_m = update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
+                    if args.run_test : break
+                if args.run_test :break
+        encoder.train()
+        
+        
+        
+def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optimizer, encoder, decoder, mapper, discriminator):
+    latent_dim = args.latent_dim
+    epochs = args.epochs
+    model_name = args.model_name
+    for each_batch, label in tqdm.tqdm(train_loader, desc='train IAAE[%d/%d]' % (i, epochs)):
+        real_image = each_batch.to(device)
+        loss_r = update_autoencoder(ae_optimizer, real_image, encoder, decoder)
+
+        if model_name in ['vanilla', 'pointMapping_but_aae'] : 
+            loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+        else : 
+            loss_d = 0.
+        if args.latent_layer > 0 and model_name in ['vanilla', 'pointMapping_but_aae'] : 
+            loss_m =  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
+        else : 
+            loss_m = 0.
+        if args.run_test : break
+        
+    if model_name == 'ulearning' and i % args.train_m_interval == 0 :
+        feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
+        for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='train M[%d/%d]' % (i, epochs)) :
+            uniform_input_cuda = each_batch.to(device)
+            encoded_feature_cuda = label_feature.to(device)
+            loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
+            if args.run_test : break
+
+    if model_name in ['ulearning_point'] : 
+        encoded_feature_tensor = make_encoded_feature_tensor(encoder, train_loader, device)
+        linspace_tensor = make_linspace_tensor(encoded_feature_tensor)
+
+        each_dim_final_loss = update_mapping_ulearning_point( mapper, linspace_tensor, \
+                                       encoded_feature_tensor, args.u_lr_min, device, print_every=-1)
+        loss_m = torch.max(each_dim_final_loss)   
+  
+    loss_log = {
+        'loss_d' : loss_d,
+        'loss_m' : loss_m,
+        'loss_r' : loss_r,
+    }
+    
+    return loss_log
+    
+    
 
 def update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder):
     ae_optimizer.zero_grad()

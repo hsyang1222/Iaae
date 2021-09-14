@@ -34,7 +34,7 @@ def get_celebA_dataset(batch_size, img_size, mini=False):
 
 
 def get_ffhq_thumbnails(batch_size, image_size):
-    image_path = "../../dataset/"
+    image_path = "../dataset/"
     transformation = transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),

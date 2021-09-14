@@ -64,6 +64,8 @@ def main(args):
     elif model_name in ['ulearning', 'ulearning_point'] : 
         encoder = Encoder(latent_dim, image_shape).to(device)
         decoder = Decoder(latent_dim, image_shape).to(device)
+        discriminator = None
+        d_optimizer = None
         ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
 
     ###########################################
@@ -130,21 +132,18 @@ def main(args):
             if args.run_test : break
 
         #generate real images info
-        inception_model_score.lazy_forward(batch_size=64, device=device, real_forward=True)
+        inception_model_score.lazy_forward(batch_size=256, device=device, real_forward=True)
         inception_model_score.calculate_real_image_statistics()
         #save real images info for next experiments
         inception_model_score.save_real_images_info('../../inception_model_info/' + real_images_info_file_name)
         #offload inception_model
         inception_model_score.model_to('cpu')
-    
 
-    '''
-    customize
-    '''
    
     if args.latent_layer > 0 : 
         if model_name in ['ulearning_point']:
             mapper = EachLatentMapping(nz=32, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
+            m_optimizer = None
         elif model_name in [ 'pointMapping_but_aae']:
             mapper = EachLatentMapping(nz=32, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
@@ -153,136 +152,27 @@ def main(args):
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
     else :
         mapper = lambda x : x
+        m_optimizer = None
 
-    for i in range(0, args.AE_iter) :
-        for each_batch, label in tqdm.tqdm(train_loader, desc='train AE[%d/%d]' % (i, args.AE_iter)) :
-            real_image = each_batch.to(device)
-            loss_r = update_autoencoder(ae_optimizer, real_image, encoder, decoder)
-            if args.run_test : break
-        #print(i, loss_r.item())
-        if args.run_test : break
+        
+    AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder)    
     
-    #pretrain M layer
-    if args.latent_layer > 0 :
-        encoder.eval()
-        if model_name in ['ulearning'] : 
-
-            feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
-
-            for i in range(0, args.train_m) : 
-                for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='train M[%d/%d]' % (i, args.train_m)) :
-                    uniform_input_cuda = each_batch.to(device)
-                    encoded_feature_cuda = label_feature.to(device)
-                    loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
-                if args.run_test : break
-                    
-        if model_name in ['ulearning_point'] :     
-            encoded_feature_tensor = make_encoded_feature_tensor(encoder, train_loader, device)
-            linspace_tensor = make_linspace_tensor(encoded_feature_tensor)
-            
-            each_dim_final_loss = update_mapping_ulearning_point( mapper, linspace_tensor, \
-                                           encoded_feature_tensor, args.u_lr_min, device, print_every=-1)
-            loss_m = torch.max(each_dim_final_loss)
-
-        if model_name in ['vanilla', 'pointMapping_but_aae'] :
-            for i in range(0, args.train_m) : 
-                for each_batch, label in tqdm.tqdm(train_loader, desc='train M[%d/%d]' % (i, args.train_m)) :
-                    real_image = each_batch.to(device)
-                    loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
-                    loss_m = update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
-                    if args.run_test : break
-                if args.run_test :break
-        encoder.train()
-           
+    
+    M_pretrain(args, train_loader, device, m_optimizer, mapper, encoder)
+     
 
     # train phase        
     for i in range(0, epochs):
-        for each_batch, label in tqdm.tqdm(train_loader, desc='train IAAE[%d/%d]' % (i, epochs)):
-            real_image = each_batch.to(device)
-            loss_r = update_autoencoder(ae_optimizer, real_image, encoder, decoder)
-            
-            if model_name in ['vanilla', 'pointMapping_but_aae'] : 
-                loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
-            else : 
-                loss_d = 0.
-            if args.latent_layer > 0 and model_name in ['vanilla', 'pointMapping_but_aae'] : 
-                loss_m =  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
-            else : 
-                loss_m = 0.
-            if args.run_test : break
-        
-        if model_name == 'ulearning' and i % args.train_m_interval == 0 :
-            feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
-            for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='train M[%d/%d]' % (i, epochs)) :
-                uniform_input_cuda = each_batch.to(device)
-                encoded_feature_cuda = label_feature.to(device)
-                loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
-            if args.run_test : break
-                
-        if model_name in ['ulearning_point'] : 
-            encoded_feature_tensor = make_encoded_feature_tensor(encoder, train_loader, device)
-            linspace_tensor = make_linspace_tensor(encoded_feature_tensor)
-            
-            each_dim_final_loss = update_mapping_ulearning_point( mapper, linspace_tensor, \
-                                           encoded_feature_tensor, args.u_lr_min, device, print_every=-1)
-            loss_m = torch.max(each_dim_final_loss)
-            
-       
-        if i % save_image_interval == 0:
-            for each_batch, label in tqdm.tqdm(train_loader, desc='generate image[%d/%d]' % (i, epochs)):    
-                if model_name in ['vanilla', 'pointMapping_but_aae'] : 
-                    sampled_images = inference_image(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
-                if model_name == 'ulearning' :
-                    sampled_images = inference_image_ulver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
-                if model_name == 'ulearning_point' :
-                    sampled_images = inference_image_ulpver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
-                inception_model_score.put_fake(sampled_images)    
+        loss_log = train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optimizer, encoder, decoder, mapper, discriminator)
         
         if i % save_image_interval == 0:
-            
-            fixed_fake_image = get_fixed_z_image_np(decoder(mapper(fixed_z)))
-            
-            #offload all GAN model to cpu and onload inception model to gpu
-            encoder = encoder.to('cpu')
-            decoder = decoder.to('cpu')
-            if args.latent_layer > 0 : mapper = mapper.to('cpu')
-            if model_name in ['vanilla', 'pointMapping_but_aae']: 
-                discriminator = discriminator.to('cpu')
-            inception_model_score.model_to(device)
-            
-            #generate fake images info
-            inception_model_score.lazy_forward(batch_size=64, device=device, fake_forward=True)
-            inception_model_score.calculate_fake_image_statistics()
-            metrics, plot = inception_model_score.calculate_generative_score(feature_pca_plot=True)
-            metrics.update({'IsNet feature':wandb.Image(plot)})
-            
-            #onload all GAN model to gpu and offload inception model to cpu
-            inception_model_score.model_to('cpu')
-            encoder = encoder.to(device)
-            decoder = decoder.to(device)
-            if args.latent_layer > 0 : mapper = mapper.to(device)
-
-            real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)                
-            mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, latent_dim, args.latent_layer, device) 
-                            
-            mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data))
-            feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
-            
-            if model_name in ['vanilla', 'pointMapping_but_aae'] : 
-                discriminator = discriminator.to(device)
-            
-            metrics.update({
-                       "fake_image" :[wandb.Image(fixed_fake_image, caption='fixed z image')],
-                       "mapper_inout(pca 1dim)" : mapper_input_out_plot,
-                       "feature_kde" : [wandb.Image(plt) for plt in feature_kde],
-                        'loss_r' : loss_r,
-                        'loss_d': loss_d,
-                        'loss_m': loss_m,
-                      })
-            if args.wandb : 
-                wandb.log(metrics, step=i)
-            
-            inception_model_score.clear_fake()
+            insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score)
+            matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
+            loss_log.update(matric)
+        if args.wandb : 
+            wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
+        else : 
+            print(loss_log)
 
     if args.wandb :  wandb.finish()
 
@@ -313,11 +203,14 @@ if __name__ == "__main__":
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)
-    parser.add_argument('--latent_layer', type=int, default=0)
+    parser.add_argument('--latent_layer', type=int, default=3)
     parser.add_argument('--AE_iter', type=int, default=0)
     parser.add_argument('--train_m', type=int, default=0)
     parser.add_argument('--u_lr_min', type=float, default=1e-4)
     parser.add_argument('--wandb', type=bool, default=False)
+    
+    import socket
+    parser.add_argument('--host_name', type=str, default=str(socket.gethostname()))
 
     args = parser.parse_args()
 
