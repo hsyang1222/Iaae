@@ -5,7 +5,7 @@ import math
 from torch.nn import functional as F
 
 class Encoder(nn.Module):
-    def __init__(self, nz, image_size):
+    def __init__(self, nz, image_size, sigmoid=False):
         super(Encoder, self).__init__()
         nc = 3
         nf=8
@@ -28,21 +28,35 @@ class Encoder(nn.Module):
             nn.BatchNorm1d(num_features=1024),
             nn.LeakyReLU(0.2, inplace=True)
         )
+        
         self.mu = nn.Linear(in_features=1024, out_features=nz)
         #self.var = nn.Linear(in_features=1024, out_features=nz)
+        self.sigmoid = sigmoid
 
     def forward(self, input):
         y =  self.net(input)
-        return torch.sigmoid(self.mu(y))#, self.var(y)
+        if self.sigmoid : y = torch.sigmoid(y) 
+        return self.mu(y)#, self.var(y)
 
 class Mapping(nn.Module) : 
-    def __init__(self, nz, linear_num) : 
+    def __init__(self, in_out_nz, nz, linear_num) : 
         super(Mapping, self).__init__()
         
-        linear = nn.ModuleList()
-        for i in range(linear_num) : 
-            linear.append( nn.Linear(in_features=nz, out_features=nz) )
+        if linear_num >= 2:
+            linear = nn.ModuleList()
+            linear.append( nn.Linear(in_features=in_out_nz, out_features=nz) )
+            linear.append( nn.ELU() )   
+
+            for i in range(linear_num-2) : 
+                linear.append( nn.Linear(in_features=nz, out_features=nz) )
+                linear.append( nn.ELU() )
+
+            linear.append( nn.Linear(in_features=nz, out_features=in_out_nz) )
             linear.append( nn.ELU() )
+        else :
+            linear.append( nn.Linear(in_features=in_out_nz, out_features=in_out_nz) )
+            linear.append( nn.ELU() )         
+                      
         self.linear = linear
         
     def forward(self, input):

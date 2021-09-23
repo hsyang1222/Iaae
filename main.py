@@ -1,5 +1,6 @@
 import generative_model_score
 inception_model_score = generative_model_score.GenerativeModelScore()
+from datetime import datetime
 import itertools
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ import hashlib
 import matplotlib.pyplot as plt
 
 def main(args):
+    
     global inception_model_score
     
     # load real images info or generate real images info
@@ -35,7 +37,6 @@ def main(args):
     dataset = args.dataset
     lr = args.lr
     n_iter = args.n_iter
-    latent_layer = args.latent_layer
     
     fixed_z = make_fixed_z(model_name, latent_dim, device)
 
@@ -62,7 +63,7 @@ def main(args):
         d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
         
     elif model_name in ['ulearning', 'ulearning_point'] : 
-        encoder = Encoder(latent_dim, image_shape).to(device)
+        encoder = Encoder(latent_dim, image_shape, sigmoid=True).to(device)
         decoder = Decoder(latent_dim, image_shape).to(device)
         discriminator = None
         d_optimizer = None
@@ -140,29 +141,33 @@ def main(args):
         inception_model_score.model_to('cpu')
 
    
-    if args.latent_layer > 0 : 
+    if args.mapper_inter_layer > 0 : 
         if model_name in ['ulearning_point']:
-            mapper = EachLatentMapping(nz=32, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
+            mapper = EachLatentMapping(nz=args.latent_dim, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
             m_optimizer = None
         elif model_name in [ 'pointMapping_but_aae']:
-            mapper = EachLatentMapping(nz=32, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
+            mapper = EachLatentMapping(nz=args.latent_dim, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
         elif model_name in ['ulearning', 'vanilla'] : 
-            mapper = Mapping(latent_dim, args.latent_layer).to(device)
+            mapper = Mapping(args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
     else :
         mapper = lambda x : x
         m_optimizer = None
 
+    if args.load_netE!='' : load_model(encoder, args.load_netE) 
+    if args.load_netM!='' : load_model(mapper, args.load_netM)   
+    if args.load_netD!='' : load_model(decoder, args.load_netD)   
+        
         
     AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder)    
     
     
-    M_pretrain(args, train_loader, device, m_optimizer, mapper, encoder)
+    M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, encoder, discriminator)
      
 
     # train phase        
-    for i in range(0, epochs):
+    for i in range(1, epochs+1):
         loss_log = train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optimizer, encoder, decoder, mapper, discriminator)
         
         if i % save_image_interval == 0:
@@ -173,6 +178,10 @@ def main(args):
             wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
         else : 
             print(loss_log)
+            
+        if i % args.save_model_every == 0 :
+            now_time = str(datetime.now())
+            save_model([encoder, mapper, decoder], [now_time+'.netE', now_time+'.netM', now_time+'.netD'])
 
     if args.wandb :  wandb.finish()
 
@@ -185,7 +194,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=2048)
     parser.add_argument('--img_size', type=int, default=32)
-    parser.add_argument('--save_image_interval', type=int, default=5)
+    parser.add_argument('--save_image_interval', type=int, default=10)
     parser.add_argument('--loss_calculation_interval', type=int, default=5)
     parser.add_argument('--latent_dim', type=int, default=32)
     parser.add_argument('--mapper_inter_nz', type=int, default=10)
@@ -203,11 +212,14 @@ if __name__ == "__main__":
 
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)
-    parser.add_argument('--latent_layer', type=int, default=3)
     parser.add_argument('--AE_iter', type=int, default=0)
     parser.add_argument('--train_m', type=int, default=0)
     parser.add_argument('--u_lr_min', type=float, default=1e-4)
     parser.add_argument('--wandb', type=bool, default=False)
+    parser.add_argument('--save_model_every', type=int, default=25)
+    parser.add_argument('--load_netE', type=str, default='')
+    parser.add_argument('--load_netM', type=str, default='')
+    parser.add_argument('--load_netD', type=str, default='')
     
     import socket
     parser.add_argument('--host_name', type=str, default=str(socket.gethostname()))

@@ -10,6 +10,16 @@ import gc
 
 import seaborn as sns
 
+
+def save_model(model_list, name_list) : 
+    for model,name in zip(model_list, name_list) : 
+        if model is not None : 
+            torch.save(model.state_dict(), './model/'+name)
+        
+def load_model(model, name) :
+    if model is not None :
+        model.load_state_dict(torch.load('./model/'+name))
+
 def insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score) : 
     model_name = args.model_name
     latent_dim = args.latent_dim
@@ -37,7 +47,7 @@ def gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminato
     #offload all GAN model to cpu and onload inception model to gpu
     encoder = encoder.eval().to('cpu')
     decoder = decoder.eval().to('cpu')
-    if args.latent_layer > 0 : mapper = mapper.eval().to('cpu')
+    if args.mapper_inter_layer > 0 : mapper = mapper.eval().to('cpu')
     if model_name in ['vanilla', 'pointMapping_but_aae']: 
         discriminator = discriminator.eval().to('cpu')
 
@@ -55,7 +65,7 @@ def gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminato
     inception_model_score.model_to('cpu')
     encoder = encoder.train().to(device)
     decoder = decoder.train().to(device)
-    if args.latent_layer > 0 : mapper = mapper.train().to(device)
+    if args.mapper_inter_layer > 0 : mapper = mapper.train().to(device)
     if model_name in ['vanilla', 'pointMapping_but_aae'] : 
         discriminator = discriminator.to(device)
 
@@ -71,10 +81,13 @@ def wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device,
     fixed_fake_image = get_fixed_z_image_np(decoder(mapper(fixed_z)))
     
     real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)                
-    mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, latent_dim, args.latent_layer, device) 
+    mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, latent_dim, args.mapper_inter_layer, device) 
 
     mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data))
-    feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
+    if type(mapper) == torch.nn.Module : 
+        feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
+    else :
+        feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data, use_M_z=False)
 
     loss_log.update({
                "fake_image" :[wandb.Image(fixed_fake_image, caption='fixed z image')],
@@ -95,14 +108,14 @@ def make_fixed_z(model_name, latent_dim, device):
         z = z = torch.rand(8**2, latent_dim, device=device) * 2 -1 
     return z
 
-def make_mapper_out(model_name, mapper, latent_dim, latent_layer, device) : 
+def make_mapper_out(model_name, mapper, latent_dim, mapper_inter_layer, device) : 
     if model_name in ['vanilla', 'pointMapping_but_aae'] :
         mapper_test_data = torch.randn(2048, latent_dim, device=device)
     elif model_name in ['ulearning'] :
         mapper_test_data = torch.rand(2048,latent_dim, device=device)
     elif model_name in ['ulearning_point']:
         mapper_test_data = torch.rand(2048, latent_dim, device=device) * 2 -1
-    if latent_layer > 0 : 
+    if mapper_inter_layer > 0 : 
         with torch.no_grad():
             mapper_out_data = mapper(mapper_test_data)
     else : 
@@ -134,14 +147,25 @@ def make_feature_plt(z, M_z, E_x, fnum) :
     ax1.set_title('feature ' + str(fnum))
     return fig1
 
+def make_feature_plt_notMz(z, E_x, fnum) : 
+    fig1, ax1 = plt.subplots()
+    sns.kdeplot(z, label='z', ax=ax1)
+    sns.kdeplot(E_x, label='E(x)', ax=ax1)
+    ax1.legend()
+    ax1.set_title('feature ' + str(fnum))
+    return fig1
 
-def feature_plt_list(z, M_z, E_x) : 
+def feature_plt_list(z, M_z, E_x, use_M_z=True) : 
     plt.clf()
     plt_list = []
     assert z.size(1) == M_z.size(1) and M_z.size(1) == E_x.size(1)
-    for i in range(z.size(1)) :
-        plt_list.append(make_feature_plt(z[:,i], M_z[:,i], E_x[:,i], i))
-        
+    if use_M_z : 
+        for i in range(z.size(1)) :
+            plt_list.append(make_feature_plt(z[:,i], M_z[:,i], E_x[:,i], i))
+    else:
+        for i in range(z.size(1)) :
+            plt_list.append(make_feature_plt_notMz(z[:,i], E_x[:,i], i))
+    
     return plt_list
 
 def make_encoded_feature_tensor(encoder, train_loader, device):
@@ -209,7 +233,7 @@ def inference_image(mapper, decoder, batch_size, latent_dim, device) :
     # normal distribution
     with torch.no_grad() : 
         z = torch.randn(batch_size, latent_dim).to(device)
-        z = torch.sigmoid(z)
+        #z = torch.sigmoid(z)
         result = decoder(mapper(z)).detach().cpu()
     return result
 

@@ -14,10 +14,11 @@ def AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder):
         #print(i, loss_r.item())
         if args.run_test : break
     
-def M_pretrain(args, train_loader, device, m_optimizer, mapper, encoder) :
+def M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, encoder, discriminator) :
+    latent_dim = args.latent_dim
     #pretrain M layer
     model_name = args.model_name
-    if args.latent_layer > 0 :
+    if args.mapper_inter_layer > 0 :
         encoder.eval()
         if model_name in ['ulearning'] : 
 
@@ -35,7 +36,7 @@ def M_pretrain(args, train_loader, device, m_optimizer, mapper, encoder) :
             linspace_tensor = make_linspace_tensor(encoded_feature_tensor)
             
             each_dim_final_loss = update_mapping_ulearning_point( mapper, linspace_tensor, \
-                                           encoded_feature_tensor, args.u_lr_min, device, print_every=-1)
+                                           encoded_feature_tensor, args.u_lr_min, device, print_every=1e+4)
             loss_m = torch.max(each_dim_final_loss)
 
         if model_name in ['vanilla', 'pointMapping_but_aae'] :
@@ -62,7 +63,7 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
             loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
         else : 
             loss_d = 0.
-        if args.latent_layer > 0 and model_name in ['vanilla', 'pointMapping_but_aae'] : 
+        if args.mapper_inter_layer > 0 and model_name in ['vanilla', 'pointMapping_but_aae'] : 
             loss_m =  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
         else : 
             loss_m = 0.
@@ -114,13 +115,13 @@ def update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cu
     
     return loss_m.item()
 
-def update_mapping_ulearning_point(mapper, x, target, go_under_loss, device, print_every=-1) :
+def update_mapping_ulearning_point(mapper, x, target, go_under_loss, device, print_every=-1, train_max=1e+5) :
     mse = torch.nn.MSELoss()
     nz = mapper.nz
     loss_list = torch.zeros(nz)
     
     mse = torch.nn.MSELoss()
-    nz = mapper.nz
+    
     loss_list = torch.zeros(nz)
     
     for each_nz in tqdm.tqdm(range(nz), desc='train M_p'):
@@ -167,6 +168,8 @@ def update_mapping_ulearning_point(mapper, x, target, go_under_loss, device, pri
                 plt.legend()
                 plt.show()
                 '''
+            if step > train_max :
+                break
         
     return loss_list
 
