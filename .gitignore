@@ -8,3 +8,5 @@ _cache_*
 images/
 logs/
 model/
+.ipynb_checkpoints*
+*.sh
