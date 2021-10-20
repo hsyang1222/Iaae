@@ -69,13 +69,12 @@ def main(args):
         ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
         d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
         
-    elif model_name in ['ulearning', 'ulearning_point', 'mimic_at_last', 'mimic'] : 
+    elif model_name in ['ulearning', 'ulearning_point'] : 
         encoder = Encoder(latent_dim, image_shape, sigmoid=True).to(device)
         decoder = Decoder(latent_dim, image_shape).to(device)
         discriminator = None
         d_optimizer = None
         ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
-        
 
     ###########################################
     #####              Score              #####
@@ -90,7 +89,7 @@ def main(args):
     if dataset == 'CelebA':
         train_loader = get_celebA_dataset(batch_size, img_size)
     elif dataset == 'FFHQ':
-        train_loader = get_ffhq_thumbnails(batch_size, img_size)
+        train_loader, test_loader = get_ffhq_thumbnails(batch_size, img_size)
     elif dataset == 'mnist':
         train_loader = get_mnist_dataset(batch_size, img_size)
     elif dataset == 'mnist_fashion':
@@ -150,7 +149,7 @@ def main(args):
 
    
     if args.mapper_inter_layer > 0 : 
-        if model_name in ['ulearning_point', 'mimic_at_last']:
+        if model_name in ['ulearning_point']:
             mapper = EachLatentMapping(nz=args.latent_dim, inter_nz=args.mapper_inter_nz, linear_num=args.mapper_inter_layer).to(device)
             m_optimizer = None
         elif model_name in [ 'pointMapping_but_aae']:
@@ -159,9 +158,6 @@ def main(args):
         elif model_name in ['ulearning', 'non-prior'] : 
             mapper = Mapping(args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
-        elif model_name in ['mimic'] : 
-            mapper = Mimic(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
-            m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr, weight_decay=1e-3)
     else :
         # case vanilla and there is no mapper
         mapper = lambda x : x
@@ -174,17 +170,25 @@ def main(args):
         
     AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder)    
     
+    
     M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, encoder, discriminator)
 
-    # train phase
-    i=0
-    loss_log={}
+    # train phase        
     for i in range(1, epochs+1):
         loss_log = train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optimizer, encoder, decoder, mapper, discriminator)
         
         if check_time_over(time_start_run, time_limit_sec) == True :
+            print("time limit over")
+            insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score)
+            matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
+            loss_log.update(matric)
+            wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
+            
+            now_time = str(datetime.now())
+            save_model([encoder, mapper, decoder], [now_time+'.netE', now_time+'.netM', now_time+'.netD'])
             break
             
+        
         if i % save_image_interval == 0:
             insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score)
             matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
@@ -198,18 +202,7 @@ def main(args):
             now_time = str(datetime.now())
             save_model([encoder, mapper, decoder], [now_time+'.netE', now_time+'.netM', now_time+'.netD'])
             
-    #make last matric        
-    if model_name in ['mimic_at_last'] :
-        M_train_at_last(args, train_loader, device, d_optimizer, m_optimizer, mapper, encoder, discriminator)
-    print("time limit over")
-    insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score)
-    matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
-    loss_log.update(matric)
-    wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
-
-    now_time = str(datetime.now())
-    save_model([encoder, mapper, decoder], [now_time+'.netE', now_time+'.netM', now_time+'.netD'])
-    
+            
 
     if args.wandb :  wandb.finish()
 
@@ -233,8 +226,7 @@ if __name__ == "__main__":
                                                                     'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 
     parser.add_argument('--model_name', type=str, default='vanilla', choices=['vanilla', 'ulearning', 'ulearning_point', \
-                                                                              'pointMapping_but_aae', 'non-prior', \
-                                                                              'mimic_at_last', 'mimic'])
+                                                                              'pointMapping_but_aae', 'non-prior'])
     parser.add_argument('--std_maximize', type=bool, default=False)
     parser.add_argument('--std_alpha', type=float, default=0.1)
     parser.add_argument('--train_m_interval', type=int, default=1)
@@ -242,21 +234,13 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--run_test', type=bool, default=False)
     parser.add_argument('--AE_iter', type=int, default=0)
-    parser.add_argument('--pretrain_m', type=int, default=0)
-    parser.add_argument('--train_m', type=int, default=1)
+    parser.add_argument('--train_m', type=int, default=0)
     parser.add_argument('--u_lr_min', type=float, default=1e-4)
     parser.add_argument('--wandb', type=bool, default=False)
     parser.add_argument('--save_model_every', type=int, default=25)
     parser.add_argument('--load_netE', type=str, default='')
     parser.add_argument('--load_netM', type=str, default='')
     parser.add_argument('--load_netD', type=str, default='')
-    
-    parser.add_argument('--m_wdecay', type=float, default=1e-3)
-    parser.add_argument('--m_gmma', type=float, default=0.9995)
-    parser.add_argument('--m_blr', type=float, default=0.1e-2)
-    parser.add_argument('--m_batch_size', type=int, default=2048)
-    
-    parser.add_argument('--M_feature', type=str, default='')
     
     import socket
     parser.add_argument('--host_name', type=str, default=str(socket.gethostname()))

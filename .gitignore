@@ -7,3 +7,4 @@ inception_model_info/
 _cache_*
 images/
 logs/
+model/
