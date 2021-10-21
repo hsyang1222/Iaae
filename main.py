@@ -48,7 +48,7 @@ def main(args):
 
     if args.wandb : 
         wandb.login()
-        wandb_name = dataset+','+model_name +','+str(img_size)+",infr_sample"
+        wandb_name = dataset+','+model_name +','+str(img_size)+",conv2change"
         if args.run_test : wandb_name += ', test run'
         wandb.init(project=project_name, 
                    config=args,
@@ -63,15 +63,15 @@ def main(args):
         
         
     if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior']:
-        encoder = Encoder(latent_dim, image_shape).to(device)
-        decoder = Decoder(latent_dim, image_shape).to(device)
+        encoder = Encoder(latent_dim, img_size).to(device)
+        decoder = Decoder(latent_dim, img_size).to(device)
         discriminator = Discriminator(latent_dim).to(device)
         ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)
         d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
         
     elif model_name in ['ulearning', 'ulearning_point', 'mimic_at_last', 'mimic'] : 
-        encoder = Encoder(latent_dim, image_shape, sigmoid=True).to(device)
-        decoder = Decoder(latent_dim, image_shape).to(device)
+        encoder = Encoder(latent_dim, img_size).to(device)
+        decoder = Decoder(latent_dim, img_size).to(device)
         discriminator = None
         d_optimizer = None
         ae_optimizer = torch.optim.Adam(itertools.chain(encoder.parameters(), decoder.parameters()), lr=lr)

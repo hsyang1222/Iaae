@@ -90,38 +90,52 @@ class Mimic(nn.Module) :
     
     
 class Encoder(nn.Module):
-    def __init__(self, nz, image_size, sigmoid=False):
+    
+    def __init__(self, nz=32, img_size=32, ngpu=1, ndf=64, ngf=64, nc=3):
         super(Encoder, self).__init__()
-        nc = 3
-        nf=8
-        img_size = image_size[1]
-        self.net = nn.Sequential(
-            nn.Conv2d(nc, nf, 5, 2, 2, bias=False),
-            nn.BatchNorm2d(nf),
+        self.ngpu = ngpu
+        
+        kernel = 2*(img_size//32)
+        # img_size 32 --> 2
+        # img_size 64 --> 4
+        # img_size 128 --> 8
+        # img_size 256 --> 16
+        
+        #print(kernel)
+        
+        self.main = nn.Sequential(
+            # input is (nc) x 64 x 64
+            nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(nf, nf*2, 5, 2, 2, bias=False),
-            nn.BatchNorm2d(nf*2),
+            # state size. (ndf) x 32 x 32
+            nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 2),
             nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(nf*2, nf*4, 5, 2, 2, bias=False),
-            nn.BatchNorm2d(nf*4),
+            # state size. (ndf*2) x 16 x 16
+            nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 4),
             nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Flatten(),
-            nn.Linear(in_features=(nf*4)*(img_size//8)*(img_size//8), out_features=1024),
-            nn.BatchNorm1d(num_features=1024),
-            nn.LeakyReLU(0.2, inplace=True)
+            # state size. (ndf*4) x 8 x 8
+            nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*8) x 4 x 4
+            #nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+            nn.Conv2d(ndf * 8, nz, kernel, 1, 0, bias=False),
+            # state size. 1x1x1
         )
         
-        self.mu = nn.Linear(in_features=1024, out_features=nz)
-        #self.var = nn.Linear(in_features=1024, out_features=nz)
-        self.sigmoid = sigmoid
+        self.nz = nz
 
     def forward(self, input):
-        y =  self.net(input)
-        if self.sigmoid : y = torch.sigmoid(y) 
-        return self.mu(y)#, self.var(y)
+        if input.is_cuda and self.ngpu > 1:
+            output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+        else:
+            output = self.main(input)
+
+        return output.view(-1, self.nz)
+
+    
 
 class Mapping(nn.Module) : 
     def __init__(self, in_out_nz, nz, linear_num) : 
@@ -217,44 +231,47 @@ class Unflatten(nn.Module):
         return input.view(len(input), self.shape[0], self.shape[1], self.shape[2])
     
 class Decoder(nn.Module):
-    def __init__(self, nz, image_size, linear_add=0):
-        nc = 3
-        nf= 8
+    def __init__(self, nz=32, img_size=32, ngpu=1, ndf=64, ngf=64, nc=3):
         super(Decoder, self).__init__()
+        self.ngpu = ngpu
+        self.nz = nz
         
-        img_size = image_size[1]
+        kernel = 2*img_size//32
+        # img_size 32 --> 2
+        # img_size 64 --> 4
+        # img_size 128 --> 8
+        # img_size 256 --> 16
         
-        linear = nn.ModuleList()
-        for i in range(linear_add) : 
-            linear.append( nn.Linear(in_features=nz, out_features=nz) )
-            linear.append( nn.ReLU() )
-        self.linear = linear
-        
-        self.net = nn.Sequential(
-            nn.Linear(in_features=nz, out_features=(nf*4)*(img_size//8)*(img_size//8)),
-            Unflatten((nf*4, (img_size//8), (img_size//8))),
-            
-            # add output_padding=1 to ConvTranspose2d to reconstruct original size
-            nn.ConvTranspose2d(nf*4, nf*2, 5, 2, 2, 1, bias=False),
-            nn.BatchNorm2d(nf*2),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.ConvTranspose2d(nf*2, nf, 5, 2, 2, 1, bias=False),
-            nn.BatchNorm2d(nf),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.ConvTranspose2d(nf, int(nf/2), 5, 2, 2, 1, bias=False),
-            nn.BatchNorm2d(int(nf/2)),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.Conv2d(int(nf/2), nc, 5, 1, 2, 1, bias=False),
-            nn.Tanh()
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            #nn.ConvTranspose2d(     nz, ngf * 8, 4, 1, 0, bias=False),
+            nn.ConvTranspose2d(     nz, ngf * 8, kernel, 1, 0, bias=False),
+            nn.BatchNorm2d(ngf * 8),
+            nn.ReLU(True),
+            # state size. (ngf*8) x 2 x 2
+            nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 4 x 4
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 2),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 8 x 8
+            nn.ConvTranspose2d(ngf * 2,     ngf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf),
+            nn.ReLU(True),
+            # state size. (ngf) x 16 x 16
+            nn.ConvTranspose2d(    ngf,      nc, 4, 2, 1, bias=False),
+            # state size. (nc) x 32 x 32
         )
+
     def forward(self, input):
-        for layer in self.linear : 
-            input = layer(input)
-        
-        return self.net(input)
+        input = input.view(-1,self.nz, 1, 1)
+        if input.is_cuda and self.ngpu > 1:
+            output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+        else:
+            output = self.main(input)
+        return output
 
 
 class Discriminator(nn.Module):

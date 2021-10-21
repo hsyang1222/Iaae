@@ -256,6 +256,7 @@ class GenerativeModelScore:
         metrics['fake_is'] = self.fake_inception_score
         
         if feature_pca_plot :
+            '''
             plt.clf()
             real = torch.tensor(real_pick)
             fake = torch.tensor(fake_pick)
@@ -271,6 +272,23 @@ class GenerativeModelScore:
             plt.legend()
             plt.xlabel('pca dim1')
             plt.ylabel('pca dim2')
+            '''
+            real = torch.tensor(real_pick)
+            fake = torch.tensor(fake_pick)
+            
+            real_fake = torch.cat([real, fake])
+            
+            U, S, V = torch.pca_lowrank(real)
+            real_pca = torch.matmul(real, V[:, :3])
+            fake_pca = torch.matmul(fake, V[:, :3])
+            
+            plt.clf()
+            fig = plt.figure(figsize=(6, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(real_pca[:,0], real_pca[:,1], real_pca[:,2], label='real')
+            ax.scatter(fake_pca[:,0], fake_pca[:,1], fake_pca[:,2], label='fake')
+            ax.legend()
+            ax.set_title('PCA to 3D feature scatter')
             return metrics, plot
         else : 
             return metrics
