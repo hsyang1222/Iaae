@@ -95,8 +95,14 @@ def wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device,
     real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)                
     mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, latent_dim, args.mapper_inter_layer, device) 
 
-    
-    mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data))
+    if args.mapper_inter_layer > 0 :
+        show_mapped=True
+        show_z = False
+    else : 
+        show_mapped=False
+        show_z = True
+        
+    mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data, 1, show_mapped, show_z))
     if isinstance(mapper, torch.nn.Module) : 
         feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
     else :
@@ -138,7 +144,7 @@ def make_mapper_out(model_name, mapper, latent_dim, mapper_inter_layer, device) 
     return mapper_test_data.cpu(), mapper_out_data.cpu()
     
 
-def pca_kde(real, test, encoded, dim=1) : 
+def pca_kde(real, test, encoded, dim=1, show_mapped=False, show_z=False) : 
     plt.clf()
     
     all_data = torch.cat([real, test, encoded])
@@ -147,9 +153,12 @@ def pca_kde(real, test, encoded, dim=1) :
     pca1 = torch.matmul(real, V[:, :dim])
     pca2 = torch.matmul(test, V[:, :dim])
     pca3 = torch.matmul(encoded, V[:, :dim])
-    #sns.kdeplot(pca1.flatten().numpy(), label='z')
-    sns.kdeplot(pca2.flatten().numpy(), label='M(z)')
-    plot = sns.kdeplot(pca3.flatten().numpy(), label='E(x)')
+    if show_z : 
+        sns.kdeplot(pca3.flatten().numpy(), label='E(x) - optimize')
+        plot = sns.kdeplot(pca1.flatten().numpy(), label='z - target')
+    if show_mapped : 
+        sns.kdeplot(pca2.flatten().numpy(), label='M(z) - optimize')
+        plot = sns.kdeplot(pca3.flatten().numpy(), label='E(x) - target')
     plot.legend()
     return plot
 

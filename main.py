@@ -48,7 +48,7 @@ def main(args):
 
     if args.wandb : 
         wandb.login()
-        wandb_name = dataset+','+model_name +','+str(img_size)+",infr_sample"
+        wandb_name = dataset+','+model_name +','+str(img_size)+",convchange"
         if args.run_test : wandb_name += ', test run'
         wandb.init(project=project_name, 
                    config=args,
@@ -231,8 +231,8 @@ if __name__ == "__main__":
     parser.add_argument('--save_image_interval', type=int, default=10)
     parser.add_argument('--loss_calculation_interval', type=int, default=5)
     parser.add_argument('--latent_dim', type=int, default=32)
-    parser.add_argument('--mapper_inter_nz', type=int, default=10)
-    parser.add_argument('--mapper_inter_layer', type=int, default=10)
+    parser.add_argument('--mapper_inter_nz', type=int, default=0)
+    parser.add_argument('--mapper_inter_layer', type=int, default=0)
     parser.add_argument('--n_iter', type=int, default=3)
     parser.add_argument('--project_name', type=str, default='AAE_compare')
     parser.add_argument('--dataset', type=str, default='cifar10', choices=['LSUN_dining_room', 'LSUN_classroom', 'LSUN_conference', 'LSUN_churches',
