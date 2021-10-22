@@ -89,6 +89,7 @@ class Mimic(nn.Module) :
         
     
     
+    
 class Encoder(nn.Module):
     
     def __init__(self, nz=32, img_size=32, ngpu=1, ndf=64, ngf=64, nc=3):
@@ -141,8 +142,10 @@ class Mapping(nn.Module) :
     def __init__(self, in_out_nz, nz, linear_num) : 
         super(Mapping, self).__init__()
         
+        linear = nn.ModuleList()
+        
         if linear_num >= 2:
-            linear = nn.ModuleList()
+            
             linear.append( nn.Linear(in_features=in_out_nz, out_features=nz) )
             linear.append( nn.ELU() )   
 
@@ -230,6 +233,7 @@ class Unflatten(nn.Module):
     def forward(self, input):
         return input.view(len(input), self.shape[0], self.shape[1], self.shape[2])
     
+    
 class Decoder(nn.Module):
     def __init__(self, nz=32, img_size=32, ngpu=1, ndf=64, ngf=64, nc=3):
         super(Decoder, self).__init__()
@@ -272,6 +276,7 @@ class Decoder(nn.Module):
         else:
             output = self.main(input)
         return output
+
 
 
 class Discriminator(nn.Module):

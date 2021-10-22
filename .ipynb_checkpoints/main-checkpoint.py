@@ -85,7 +85,7 @@ def main(args):
 
     '''
     dataset 채워주세요!
-    customize
+    customize 
     '''
     if dataset == 'CelebA':
         train_loader = get_celebA_dataset(batch_size, img_size)

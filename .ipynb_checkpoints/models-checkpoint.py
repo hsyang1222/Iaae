@@ -141,8 +141,10 @@ class Mapping(nn.Module) :
     def __init__(self, in_out_nz, nz, linear_num) : 
         super(Mapping, self).__init__()
         
+        linear = nn.ModuleList()
+        
         if linear_num >= 2:
-            linear = nn.ModuleList()
+            
             linear.append( nn.Linear(in_features=in_out_nz, out_features=nz) )
             linear.append( nn.ELU() )   
 

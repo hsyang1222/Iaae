@@ -48,7 +48,7 @@ def main(args):
 
     if args.wandb : 
         wandb.login()
-        wandb_name = dataset+','+model_name +','+str(img_size)+",conv2change"
+        wandb_name = dataset+','+model_name +','+str(img_size)+",infr_sample"
         if args.run_test : wandb_name += ', test run'
         wandb.init(project=project_name, 
                    config=args,
@@ -70,7 +70,7 @@ def main(args):
         d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
         
     elif model_name in ['ulearning', 'ulearning_point', 'mimic_at_last', 'mimic'] : 
-        encoder = Encoder(latent_dim, img_size).to(device)
+        encoder = Encoder(latent_dim, img_size, sigmoid=True).to(device)
         decoder = Decoder(latent_dim, img_size).to(device)
         discriminator = None
         d_optimizer = None
@@ -183,6 +183,8 @@ def main(args):
         loss_log = train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optimizer, encoder, decoder, mapper, discriminator)
         
         if check_time_over(time_start_run, time_limit_sec) == True :
+            loss_log.update({'spend time' : time.time()-time_start_run})
+            print("time limit over")
             break
             
         if i % save_image_interval == 0:
@@ -190,25 +192,29 @@ def main(args):
             matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
             loss_log.update(matric)
         if args.wandb : 
+            loss_log.update({'spend time' : time.time()-time_start_run})
             wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
         else : 
             print(loss_log)
             
         if i % args.save_model_every == 0 :
             now_time = str(datetime.now())
-            save_model([encoder, mapper, decoder], [now_time+'.netE', now_time+'.netM', now_time+'.netD'])
+            save_model([encoder, mapper, decoder], ["%s[%d epoch].netE"%(now_time,i), "%s[%d epoch].netM"%(now_time,i), "%s[%d epoch].netD"%(now_time,i)])
+            
+            
             
     #make last matric        
     if model_name in ['mimic_at_last'] :
         M_train_at_last(args, train_loader, device, d_optimizer, m_optimizer, mapper, encoder, discriminator)
-    print("time limit over")
-    insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score)
-    matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
-    loss_log.update(matric)
-    wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
+    if i % save_image_interval != 0:
+        insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder, inception_model_score)
+        matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
+    if args.wandb : 
+        loss_log.update(matric)
+        wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
 
     now_time = str(datetime.now())
-    save_model([encoder, mapper, decoder], [now_time+'.netE', now_time+'.netM', now_time+'.netD'])
+    save_model([encoder, mapper, decoder], ["%s[%d epoch].netE"%(now_time,i), "%s[%d epoch].netM"%(now_time,i), "%s[%d epoch].netD"%(now_time,i)])
     
 
     if args.wandb :  wandb.finish()
@@ -220,7 +226,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--epochs', type=int, default=100)
-    parser.add_argument('--batch_size', type=int, default=2048)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--img_size', type=int, default=32)
     parser.add_argument('--save_image_interval', type=int, default=10)
     parser.add_argument('--loss_calculation_interval', type=int, default=5)

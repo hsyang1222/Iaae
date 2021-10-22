@@ -6,7 +6,7 @@ from utils import *
 
 
 def AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder):
-    loss_r_sum = 9999.99
+    loss_r_sum = -1.
     
     for i in range(0, args.AE_iter) :
         last_loss = loss_r_sum
@@ -20,7 +20,7 @@ def AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder):
         if args.run_test : break
         
 def M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, encoder, discriminator) :
-    loss_m_sum=999999.
+    loss_m_sum=-1.
     latent_dim = args.latent_dim
     #pretrain M layer
     model_name = args.model_name
@@ -31,8 +31,8 @@ def M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, enc
 
             feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
 
-            for i in range(0, args.train_m) : 
-                for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='pretrain M [%d/%d]' % (i, args.train_m)) :
+            for i in range(0, args.pretrain_m) : 
+                for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='pretrain M [%d/%d]' % (i, args.pretrain_m)) :
                     uniform_input_cuda = each_batch.to(device)
                     encoded_feature_cuda = label_feature.to(device)
                     loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
@@ -47,8 +47,8 @@ def M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, enc
             loss_m = torch.max(each_dim_final_loss)
 
         if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior'] :
-            for i in range(0, args.train_m) : 
-                for each_batch, label in tqdm.tqdm(train_loader, desc='pretrain M [%d/%d]' % (i, args.train_m)) :
+            for i in range(0, args.pretrain_m) : 
+                for each_batch, label in tqdm.tqdm(train_loader, desc='pretrain M [%d/%d]' % (i, args.pretrain_m)) :
                     real_image = each_batch.to(device)
                     loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
                     loss_m = update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
@@ -151,7 +151,7 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
     if model_name in ['mimic'] :
         feature_tensor_dloader = encoded_feature_to_dl(torch.cat(encoded_feature_list), args.batch_size)
        
-        loss_m_sum = -9999.
+        loss_m_sum = -1.
         for m_i in range(0, args.train_m) : 
             last_loss = loss_m_sum
             loss_m_sum = 0.

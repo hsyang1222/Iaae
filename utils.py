@@ -147,7 +147,7 @@ def pca_kde(real, test, encoded, dim=1) :
     pca1 = torch.matmul(real, V[:, :dim])
     pca2 = torch.matmul(test, V[:, :dim])
     pca3 = torch.matmul(encoded, V[:, :dim])
-    sns.kdeplot(pca1.flatten().numpy(), label='z')
+    #sns.kdeplot(pca1.flatten().numpy(), label='z')
     sns.kdeplot(pca2.flatten().numpy(), label='M(z)')
     plot = sns.kdeplot(pca3.flatten().numpy(), label='E(x)')
     plot.legend()

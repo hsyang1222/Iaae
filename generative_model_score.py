@@ -272,24 +272,43 @@ class GenerativeModelScore:
             plt.legend()
             plt.xlabel('pca dim1')
             plt.ylabel('pca dim2')
+            return metrics, plot
             '''
-            real = torch.tensor(real_pick)
-            fake = torch.tensor(fake_pick)
             
-            real_fake = torch.cat([real, fake])
+            real_feature = torch.tensor(self.real_feature_np)
+            fake_feature = torch.tensor(self.fake_feature_np)
+
+            fake_real = torch.cat((real_feature, fake_feature))
+
+            U, S, V = torch.pca_lowrank(fake_real)
+            real_pick = torch.tensor(np.random.permutation(self.real_feature_np)[:2048])
+            fake_pick = torch.tensor(np.random.permutation(self.fake_feature_np)[:2048])
+
+            real_pca = torch.matmul(real_pick, V[:, :3])
+            fake_pca = torch.matmul(fake_pick, V[:, :3])
             
-            U, S, V = torch.pca_lowrank(real)
-            real_pca = torch.matmul(real, V[:, :3])
-            fake_pca = torch.matmul(fake, V[:, :3])
             
             plt.clf()
             fig = plt.figure(figsize=(6, 6))
             ax = fig.add_subplot(111, projection='3d')
-            ax.scatter(real_pca[:,0], real_pca[:,1], real_pca[:,2], label='real')
-            ax.scatter(fake_pca[:,0], fake_pca[:,1], fake_pca[:,2], label='fake')
+
+            ax.scatter(real_pca[:,0], real_pca[:,1], real_pca[:,2], alpha=0.2, label='real', zorder=0)
+            ax.scatter(fake_pca[:,0], fake_pca[:,1], fake_pca[:,2], alpha=0.2, label='fake', zorder=10)
+
+            mean_x_fake, mean_y_fake, mean_z_fake = torch.mean(fake_pca[:,0]), torch.mean(fake_pca[:,1]), torch.mean(fake_pca[:,2])
+            mean_x_real, mean_y_real, mean_z_real = torch.mean(real_pca[:,0]), torch.mean(real_pca[:,1]), torch.mean(real_pca[:,2])
+            diff = ((mean_x_fake-mean_x_real)**2 + (mean_y_fake-mean_y_real)**2 + (mean_z_fake-mean_z_real)**2)**0.5
+
+            ann_x, ann_y, ann_z = (mean_x_fake+mean_x_real)/2, (mean_y_fake+mean_y_real)/2, (mean_z_fake+mean_z_real)/2
+
+            ax.plot((mean_x_real, mean_x_fake), (mean_y_real, mean_y_fake), (mean_z_real, mean_z_fake), color = 'black',  lw = 3, zorder=15, marker='*', linestyle='--')
+            ax.text(ann_x, ann_y, ann_z, ' %.1f '%diff, 'y', fontsize=20, zorder=15)
+
             ax.legend()
             ax.set_title('PCA to 3D feature scatter')
-            return metrics, plot
+        
+        
+            return metrics, fig
         else : 
             return metrics
     
