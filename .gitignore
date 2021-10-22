@@ -10,3 +10,4 @@ logs/
 model/
 .ipynb_checkpoints*
 *.sh
+.ipynb_checkpoints/
