@@ -1,9 +1,0 @@
-python main.py --batch_size=64 --dataset=FFHQ --model_name=mimic --AE_iter=3 --pretrain_m=3 --mapper_inter_nz --img_size=32 --save_image_interval=100 --wandb=True --time_limit=3364
-
-python main.py --batch_size=64 --dataset=FFHQ --model_name=vanilla --img_size=64 --save_image_interval=100 --wandb=True --time_limit=3364
-
-python main.py --batch_size=64 --dataset=FFHQ --model_name=vanilla --img_size=128 --save_image_interval=100 --wandb=True --time_limit=3364
-
-python main.py --batch_size=64 --dataset=FFHQ --model_name=vanilla --img_size=256 --save_image_interval=100 --wandb=True --time_limit=3364
-
-
