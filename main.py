@@ -70,7 +70,7 @@ def main(args):
         d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=lr)
         
     elif model_name in ['ulearning', 'ulearning_point', 'mimic_at_last', 'mimic'] : 
-        encoder = Encoder(latent_dim, img_size, sigmoid=True).to(device)
+        encoder = Encoder(latent_dim, img_size).to(device)
         decoder = Decoder(latent_dim, img_size).to(device)
         discriminator = None
         d_optimizer = None
@@ -181,9 +181,9 @@ def main(args):
     loss_log={}
     for i in range(1, epochs+1):
         loss_log = train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optimizer, encoder, decoder, mapper, discriminator)
+        loss_log.update({'spend time' : time.time()-time_start_run})
         
         if check_time_over(time_start_run, time_limit_sec) == True :
-            loss_log.update({'spend time' : time.time()-time_start_run})
             print("time limit over")
             break
             
@@ -192,7 +192,6 @@ def main(args):
             matric = gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminator, inception_model_score)
             loss_log.update(matric)
         if args.wandb : 
-            loss_log.update({'spend time' : time.time()-time_start_run})
             wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log)
         else : 
             print(loss_log)
