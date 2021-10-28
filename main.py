@@ -240,7 +240,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_name', type=str, default='vanilla', choices=['vanilla', 'ulearning', 'ulearning_point', \
                                                                               'pointMapping_but_aae', 'non-prior', \
-                                                                              'mimic_at_last', 'mimic'])
+                                                                              'mimic_at_last', 'mimic', 'mimic+non-prior'])
     parser.add_argument('--std_maximize', type=bool, default=False)
     parser.add_argument('--std_alpha', type=float, default=0.1)
     parser.add_argument('--train_m_interval', type=int, default=1)
