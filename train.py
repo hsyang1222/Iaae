@@ -70,6 +70,33 @@ def M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, enc
             
             encoder.train()
             return feature_tensor_dloader, loss_m_sum
+        
+        if model_name in ['mimic+non-prior'] :
+            feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
+            
+            for i in range(0, args.pretrain_m) : 
+                last_loss = loss_m_sum
+                loss_m_sum = 0.
+                
+                #train mapper by mimic style
+                for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='pretrain M [%d/%d](l=%.04f)' % (i, args.pretrain_m, last_loss)) :
+                    uniform_input_cuda = each_batch.to(device)
+                    sortedencoded_feature_cuda = label_feature.to(device)
+                    loss_m = update_mimic(m_optimizer, uniform_input_cuda, sortedencoded_feature_cuda, mapper)
+                    loss_m_sum+=loss_m
+                    if args.run_test : break   
+                
+                #train mapper by discriminator style
+                for each_batch, label in tqdm.tqdm(train_loader, desc='pretrain M [%d/%d]' % (i, args.pretrain_m)) :
+                    real_image = each_batch.to(device)
+                    loss_d = update_linspace_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+                    loss_m = update_linspace_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim)
+                    if args.run_test : break
+                    
+                if args.run_test :break
+            
+            encoder.train()
+            return feature_tensor_dloader, loss_m_sum        
             
         encoder.train()
         return loss_m_sum
@@ -112,11 +139,17 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
     latent_dim = args.latent_dim
     epochs = args.epochs
     model_name = args.model_name
+    
+    loss_d = 0.
+    loss_m = 0.
+    loss_r = 0.
+    loss_md = 0.
+    
     encoded_feature_list = []
-    for each_batch, label in tqdm.tqdm(train_loader, desc='train IAAE[%d/%d]' % (i, epochs)):
+    for each_batch, label in tqdm.tqdm(train_loader, desc='train AE[%d/%d]' % (i, epochs)):
         real_image = each_batch.to(device)
         
-        if model_name in ['mimic'] : 
+        if model_name in ['mimic', 'mimic+non-prior'] : 
             loss_r, encoded_feature = update_autoencoder(ae_optimizer, real_image, encoder, decoder, return_encoded_feature=True)
             encoded_feature_list.append(encoded_feature)
         else:
@@ -150,7 +183,6 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
         
     if model_name in ['mimic'] :
         feature_tensor_dloader = encoded_feature_to_dl(torch.cat(encoded_feature_list), args.batch_size)
-       
         loss_m_sum = -1.
         for m_i in range(0, args.train_m) : 
             last_loss = loss_m_sum
@@ -167,16 +199,46 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
                 if args.run_test : break   
             if args.run_test : break   
         loss_m = loss_m_sum
-    
-    if model_name in ['mimic_at_last']:
-        #pass train latent to image
-        loss_d = 0.
-        loss_m = 0.
-  
+    elif model_name in ['mimic+non-prior'] : 
+        feature_tensor_dloader = encoded_feature_to_dl(torch.cat(encoded_feature_list), args.batch_size)
+        loss_m_sum = -1.
+        #train m by mimic
+        for m_i in range(0, args.train_m) : 
+            last_loss = loss_m_sum
+            loss_m_sum = 0.
+            if args.train_m > 1 : 
+                desc='train M-mimic[%d/%d/%d](l=%.04f)' % (m_i, args.train_m, i, last_loss)
+            else:
+                desc='train M-mimic[%d/%d]' % (i,epochs)
+            for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc=desc) :
+                uniform_input_cuda = each_batch.to(device)
+                sortedencoded_feature_cuda = label_feature.to(device)
+                loss_m = update_mimic(m_optimizer, uniform_input_cuda, sortedencoded_feature_cuda, mapper)
+                loss_m_sum+=loss_m
+                if args.run_test : break   
+            if args.run_test : break   
+        
+        loss_md_sum = 0.
+        loss_d_sum= 0.
+        #train m by discriminator
+        for each_batch, label in tqdm.tqdm(train_loader, desc='train M-dis[%d/%d]' % (i, epochs)) :
+            real_image = each_batch.to(device)
+            loss_d = update_linspace_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+            loss_m = update_linspace_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim)
+            loss_d_sum += loss_d
+            loss_md_sum += loss_m
+            if args.run_test : break
+        
+        loss_m = loss_m_sum        
+        loss_d = loss_d_sum
+        loss_md = loss_md_sum
+
+        
     loss_log = {
         'loss_d' : loss_d,
         'loss_m' : loss_m,
         'loss_r' : loss_r,
+        'loss_md' : loss_md,
       #  'feature_tensor_dloader' : feature_tensor_dloader,
     }
     
@@ -285,6 +347,31 @@ def update_mapping_ulearning_point(mapper, x, target, go_under_loss, device, pri
         
     return loss_list
 
+def update_linspace_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim) :
+    
+    batch_size = real_image.size(0)
+    device = real_image.device
+    bce = torch.nn.BCELoss(reduction='sum')
+    
+    label_one = torch.ones(batch_size, 1, device=device)
+    label_zero = torch.zeros(batch_size, 1, device=device)
+    
+    encoded_real = encoder(real_image)
+    d_predict_encoded_real = discriminator(encoded_real)    
+    loss_d_e_real = bce(d_predict_encoded_real, label_one)
+    
+    linspace_noise = torch.rand(batch_size, latent_dim, device=device) * 2 -1 
+    nonprior_map_out = mapper(linspace_noise)
+    
+    d_predict_mapping_fake = discriminator(nonprior_map_out)
+    loss_d_m_fake = bce(d_predict_mapping_fake, label_zero)
+    
+    d_optimizer.zero_grad()    
+    loss_d = loss_d_e_real + loss_d_m_fake
+    loss_d.backward()
+    d_optimizer.step()
+    
+    return loss_d.item()
 
 def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim) :
     
@@ -310,7 +397,28 @@ def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator
     d_optimizer.step()
     
     return loss_d.item()
+
+
+def update_linspace_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim) : 
+    batch_size = real_image.size(0)
+    device = real_image.device
+    bce = torch.nn.BCELoss(reduction='sum')
     
+    label_one = torch.ones(batch_size, 1, device=device)
+    
+    linspace_noise = torch.rand(batch_size, latent_dim, device=device) * 2 -1
+    nonprior_map_out = mapper(linspace_noise)
+    d_predict_mapping_fake = discriminator(nonprior_map_out)
+    loss_d_m_fake = bce(d_predict_mapping_fake, label_one)
+    
+    m_optimizer.zero_grad()
+    loss_m = loss_d_m_fake
+    loss_m.backward()
+    m_optimizer.step()
+    
+    return loss_m.item()    
+    
+
 def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, std_maximize=False, std_alpha=0.1) : 
     batch_size = real_image.size(0)
     device = real_image.device
@@ -323,12 +431,6 @@ def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, s
     d_predict_mapping_fake = discriminator(mapping_fake)
     loss_d_m_fake = bce(d_predict_mapping_fake, label_one)
     
-    #cal std loss
-    if std_maximize : 
-        to_maximize = torch.mean(torch.std(mapping_fake, dim=1))
-        loss_m_std = -to_maximize * std_alpha
-    else : 
-        loss_m_std = 0.
     
     m_optimizer.zero_grad()
     loss_m = loss_d_m_fake + loss_m_std
