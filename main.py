@@ -43,7 +43,7 @@ def main(args):
     image_shape = [3, img_size, img_size]
     
     time_limit_sec = timeparse(args.time_limit)
-    time_start_run = time.time()    
+   
     
 
     if args.wandb : 
@@ -62,7 +62,7 @@ def main(args):
         args.mapper_inter_layer = 0 
         
         
-    if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior']:
+    if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior', 'mimic+non-prior']:
         encoder = Encoder(latent_dim, img_size).to(device)
         decoder = Decoder(latent_dim, img_size).to(device)
         discriminator = Discriminator(latent_dim).to(device)
@@ -159,9 +159,12 @@ def main(args):
         elif model_name in ['ulearning', 'non-prior'] : 
             mapper = Mapping(args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
-        elif model_name in ['mimic'] : 
+        elif model_name in ['mimic',] : 
             mapper = Mimic(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
-            m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr, weight_decay=1e-3)
+            m_optimizer = torch.optim.Adam(mapper1.parameters(), lr=lr, weight_decay=1e-3)
+        elif model_name in [ 'mimic+non-prior',] :
+            mapper = MimicStack(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
+            m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
     else :
         # case vanilla and there is no mapper
         mapper = lambda x : x
@@ -171,6 +174,7 @@ def main(args):
     if args.load_netM!='' : load_model(mapper, args.load_netM)   
     if args.load_netD!='' : load_model(decoder, args.load_netD)   
         
+    time_start_run = time.time()     
         
     AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder)    
     
@@ -239,7 +243,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--model_name', type=str, default='vanilla', choices=['vanilla', 'ulearning', 'ulearning_point', \
                                                                               'pointMapping_but_aae', 'non-prior', \
-                                                                              'mimic_at_last', 'mimic'])
+                                                                              'mimic_at_last', 'mimic', 'mimic+non-prior'])
     parser.add_argument('--std_maximize', type=bool, default=False)
     parser.add_argument('--std_alpha', type=float, default=0.1)
     parser.add_argument('--train_m_interval', type=int, default=1)

@@ -88,8 +88,6 @@ class Mimic(nn.Module) :
         return torch.cat(predict_list, dim=1)
         
     
-    
-    
 class Encoder(nn.Module):
     
     def __init__(self, nz=32, img_size=32, ngpu=1, ndf=64, ngf=64, nc=3):

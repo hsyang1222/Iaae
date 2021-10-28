@@ -43,7 +43,7 @@ def insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder
                 sampled_images = inference_image(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
             if model_name == 'ulearning' :
                 sampled_images = inference_image_ulver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
-            if model_name in ['ulearning_point', 'mimic_at_last', 'mimic'] :
+            if model_name in ['ulearning_point', 'mimic_at_last', 'mimic', 'mimic+non-prior'] :
                 sampled_images = inference_image_ulpver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
             inception_model_score.put_fake(sampled_images) 
         if args.run_test : break
@@ -60,7 +60,7 @@ def gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminato
     encoder = encoder.eval().to('cpu')
     decoder = decoder.eval().to('cpu')
     if args.mapper_inter_layer > 0 : mapper = mapper.eval().to('cpu')
-    if model_name in ['vanilla', 'pointMapping_but_aae']: 
+    if model_name in ['vanilla', 'pointMapping_but_aae', 'mimic+non-prior']: 
         discriminator = discriminator.eval().to('cpu')
 
     inception_model_score.model_to(device)
@@ -78,7 +78,7 @@ def gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminato
     encoder = encoder.train().to(device)
     decoder = decoder.train().to(device)
     if args.mapper_inter_layer > 0 : mapper = mapper.train().to(device)
-    if model_name in ['vanilla', 'pointMapping_but_aae'] : 
+    if model_name in ['vanilla', 'pointMapping_but_aae', 'mimic+non-prior'] : 
         discriminator = discriminator.to(device)
 
     inception_model_score.clear_fake()
@@ -125,7 +125,7 @@ def make_fixed_z(model_name, latent_dim, device):
         z = torch.randn(8 ** 2, latent_dim, device=device)
     elif model_name in ['ulearning'] : 
         z = torch.rand(8 ** 2, latent_dim, device=device)
-    elif model_name in ['ulearning_point', 'mimic_at_last', 'mimic']:
+    elif model_name in ['ulearning_point', 'mimic_at_last', 'mimic', 'mimic+non-prior']:
         z = torch.rand(8**2, latent_dim, device=device) * 2 -1 
     return z
 
@@ -134,7 +134,7 @@ def make_mapper_out(model_name, mapper, latent_dim, mapper_inter_layer, device) 
         mapper_test_data = torch.randn(2048, latent_dim, device=device)
     elif model_name in ['ulearning'] :
         mapper_test_data = torch.rand(2048,latent_dim, device=device)
-    elif model_name in ['ulearning_point', 'mimic_at_last', 'mimic']:
+    elif model_name in ['ulearning_point', 'mimic_at_last', 'mimic', 'mimic+non-prior']:
         mapper_test_data = torch.rand(2048, latent_dim, device=device) * 2 -1
     if mapper_inter_layer > 0 : 
         with torch.no_grad():
