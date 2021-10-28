@@ -43,8 +43,7 @@ def main(args):
     image_shape = [3, img_size, img_size]
     
     time_limit_sec = timeparse(args.time_limit)
-    time_start_run = time.time()    
-    
+
 
     if args.wandb : 
         wandb.login()
@@ -170,6 +169,8 @@ def main(args):
     if args.load_netE!='' : load_model(encoder, args.load_netE) 
     if args.load_netM!='' : load_model(mapper, args.load_netM)   
     if args.load_netD!='' : load_model(decoder, args.load_netD)   
+    
+    time_start_run = time.time()    
         
         
     AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder)    
