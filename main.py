@@ -43,12 +43,6 @@ def main(args):
     image_shape = [3, img_size, img_size]
     
     time_limit_sec = timeparse(args.time_limit)
-<<<<<<< HEAD
-
-=======
-   
-    
->>>>>>> notebook
 
     if args.wandb : 
         wandb.login()
