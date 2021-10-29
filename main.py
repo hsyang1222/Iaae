@@ -157,7 +157,7 @@ def main(args):
         elif model_name in ['ulearning', 'non-prior'] : 
             mapper = Mapping(args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
-        elif model_name in ['mimic',] : 
+        elif model_name in ['mimic'] : 
             mapper = Mimic(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper1.parameters(), lr=lr, weight_decay=1e-3)
         elif model_name in [ 'mimic+non-prior',] :
