@@ -62,8 +62,11 @@ def M_pretrain(args, train_loader, device, d_optimizer, m_optimizer, mapper, enc
                 last_loss = loss_m_sum
                 loss_m_sum = 0.
                 for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc='pretrain M [%d/%d](l=%.04f)' % (i, args.pretrain_m, last_loss)) :
-                    uniform_input_cuda = each_batch.to(device)
-                    sortedencoded_feature_cuda = label_feature.to(device)
+                    #shuffle in each dim
+                    perm_index = torch.stack([torch.randperm(each_batch.size(0)) for i in range(each_batch.size(1))],dim=1)
+
+                    uniform_input_cuda = each_batch[perm_index].to(device)
+                    sortedencoded_feature_cuda = label_feature[perm_index].to(device)
                     loss_m = update_mimic(m_optimizer, uniform_input_cuda, sortedencoded_feature_cuda, mapper)
                     loss_m_sum+=loss_m
                 if args.run_test : break   
@@ -197,8 +200,11 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
             else:
                 desc='train M [%d/%d]' % (i,epochs)
             for each_batch, label_feature in tqdm.tqdm(feature_tensor_dloader, desc=desc) :
-                uniform_input_cuda = each_batch.to(device)
-                sortedencoded_feature_cuda = label_feature.to(device)
+                #shuffle in each dim
+                perm_index = torch.stack([torch.randperm(each_batch.size(0)) for i in range(each_batch.size(1))],dim=1)
+
+                uniform_input_cuda = each_batch[perm_index].to(device)
+                sortedencoded_feature_cuda = label_feature[perm_index].to(device)
                 loss_m = update_mimic(m_optimizer, uniform_input_cuda, sortedencoded_feature_cuda, mapper)
                 loss_m_sum+=loss_m
                 if args.run_test : break   
