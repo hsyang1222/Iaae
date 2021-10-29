@@ -159,7 +159,7 @@ def main(args):
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
         elif model_name in ['mimic'] : 
             mapper = Mimic(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
-            m_optimizer = torch.optim.Adam(mapper1.parameters(), lr=lr, weight_decay=1e-3)
+            m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr, weight_decay=1e-3)
         elif model_name in [ 'mimic+non-prior',] :
             mapper = MimicStack(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
