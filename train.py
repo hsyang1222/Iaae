@@ -433,7 +433,7 @@ def update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, s
     
     
     m_optimizer.zero_grad()
-    loss_m = loss_d_m_fake + loss_m_std
+    loss_m = loss_d_m_fake
     loss_m.backward()
     m_optimizer.step()
     
