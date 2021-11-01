@@ -70,6 +70,9 @@ class Mimic(nn.Module) :
         net_list = [single_line(hidden_feature, hidden_layer) for i in range(in_feature)] 
         self.net_list = torch.nn.ModuleList(net_list)
         
+        self.mu = []
+        self.sig = []
+        
     def forward(self, x) :
         assert x.size(1) == len(self.net_list)
         
@@ -84,6 +87,11 @@ class Mimic(nn.Module) :
                 predict_each_dim = each_layer(predict_each_dim)
             
             predict_list.append(predict_each_dim)
+            
+        # save mu and sig in only training mode
+        if self.training : 
+            for each_dim in range(x.size(1)) : 
+                
             
         return torch.cat(predict_list, dim=1)
         
