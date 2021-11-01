@@ -60,7 +60,7 @@ def main(args):
         args.mapper_inter_layer = 0 
         
         
-    if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior', 'mimic+non-prior']:
+    if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior', 'mimic+non-prior', 'vanilla-mimic']:
         encoder = Encoder(latent_dim, img_size).to(device)
         decoder = Decoder(latent_dim, img_size).to(device)
         discriminator = Discriminator(latent_dim).to(device)
@@ -157,7 +157,7 @@ def main(args):
         elif model_name in ['ulearning', 'non-prior'] : 
             mapper = Mapping(args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr)
-        elif model_name in ['mimic'] : 
+        elif model_name in ['mimic', 'vanilla-mimic'] : 
             mapper = Mimic(args.latent_dim, args.latent_dim, args.mapper_inter_nz, args.mapper_inter_layer).to(device)
             m_optimizer = torch.optim.Adam(mapper.parameters(), lr=lr, weight_decay=1e-3)
         elif model_name in [ 'mimic+non-prior',] :
@@ -173,8 +173,7 @@ def main(args):
     if args.load_netD!='' : load_model(decoder, args.load_netD)   
     
     time_start_run = time.time()    
-        
-    time_start_run = time.time()     
+          
         
     AE_pretrain(args, train_loader, device, ae_optimizer, encoder, decoder)    
     
@@ -237,13 +236,14 @@ if __name__ == "__main__":
     parser.add_argument('--mapper_inter_nz', type=int, default=0)
     parser.add_argument('--mapper_inter_layer', type=int, default=0)
     parser.add_argument('--n_iter', type=int, default=3)
-    parser.add_argument('--project_name', type=str, default='AAE_compare')
+    parser.add_argument('--project_name', type=str, default='AAE_vs_mimic')
     parser.add_argument('--dataset', type=str, default='cifar10', choices=['LSUN_dining_room', 'LSUN_classroom', 'LSUN_conference', 'LSUN_churches',
                                                                     'FFHQ', 'CelebA', 'cifar10', 'mnist', 'mnist_fashion', 'emnist'])
 
     parser.add_argument('--model_name', type=str, default='vanilla', choices=['vanilla', 'ulearning', 'ulearning_point', \
                                                                               'pointMapping_but_aae', 'non-prior', \
-                                                                              'mimic_at_last', 'mimic', 'mimic+non-prior'])
+                                                                              'mimic_at_last', 'mimic', 'mimic+non-prior',
+                                                                             'vanilla-mimic'])
     parser.add_argument('--std_maximize', type=bool, default=False)
     parser.add_argument('--std_alpha', type=float, default=0.1)
     parser.add_argument('--train_m_interval', type=int, default=1)

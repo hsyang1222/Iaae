@@ -151,24 +151,32 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
     loss_md = 0.
     
     encoded_feature_list = []
+    loss_r_sum = 0.
     for each_batch, label in tqdm.tqdm(train_loader, desc='train AE[%d/%d]' % (i, epochs)):
         real_image = each_batch.to(device)
         
-        if model_name in ['mimic', 'mimic+non-prior'] : 
+        if model_name in ['mimic', 'mimic+non-prior', ] : 
             loss_r, encoded_feature = update_autoencoder(ae_optimizer, real_image, encoder, decoder, return_encoded_feature=True)
+            loss_r_sum += loss_r
+            encoded_feature_list.append(encoded_feature)
+        elif model_name in ['vanilla-mimic'] : 
+            loss_r, encoded_feature = update_mapped_autoencoder(ae_optimizer, real_image, encoder, decoder, mapper, True)
+            loss_r_sum += loss_r
             encoded_feature_list.append(encoded_feature)
         else:
-            loss_r = update_autoencoder(ae_optimizer, real_image, encoder, decoder)
+            loss_r += update_autoencoder(ae_optimizer, real_image, encoder, decoder)
 
+            
         if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior'] : 
-            loss_d = update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
+            loss_d += update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator, latent_dim)
         else : 
             loss_d = 0.
         if args.mapper_inter_layer > 0 and model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior'] : 
-            loss_m =  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
+            loss_m +=  update_mapping(m_optimizer, real_image, mapper, discriminator, latent_dim, args.std_maximize, args.std_alpha)
         else : 
             loss_m = 0.
         if args.run_test : break
+    loss_r = loss_r_sum
         
     if model_name == 'ulearning' and i % args.train_m_interval == 0 :
         feature_tensor_dloader = make_ulearning_dsl(train_loader, encoder, device, args.batch_size)
@@ -178,6 +186,28 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
             loss_m = update_mapping_ulearning(m_optimizer, uniform_input_cuda, encoded_feature_cuda, mapper)
             if args.run_test : break
 
+    if model_name in ['vanilla-mimic'] : 
+        feature_tensor_dloader = encoded_feature_to_Ex_z(torch.cat(encoded_feature_list), args.batch_size)
+        loss_m_sum = -1.
+        for m_i in range(0, args.train_m) : 
+            last_loss = loss_m_sum
+            loss_m_sum = 0.
+            if args.train_m > 1 : 
+                desc='train M [%d/%d/%d](l=%.04f)' % (m_i, args.train_m, i, last_loss)
+            else:
+                desc='train M [%d/%d]' % (i,epochs)
+            for label_feature, uniform_output in tqdm.tqdm(feature_tensor_dloader, desc=desc) :
+                
+                sortedencoded_feature_cuda = label_feature.to(device)
+                uniform_output_cuda = uniform_output.to(device)
+                
+                loss_m = update_mimic(m_optimizer, sortedencoded_feature_cuda, uniform_output_cuda, mapper)
+                loss_m_sum+=loss_m
+                if args.run_test : break   
+            if args.run_test : break   
+        loss_m = loss_m_sum
+            
+            
     if model_name in ['ulearning_point'] : 
         encoded_feature_tensor = make_encoded_feature_tensor(encoder, train_loader, device)
         linspace_tensor = make_linspace_tensor(encoded_feature_tensor)
@@ -247,12 +277,23 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
         'loss_m' : loss_m,
         'loss_r' : loss_r,
         'loss_md' : loss_md,
-      #  'feature_tensor_dloader' : feature_tensor_dloader,
+        #'feature_tensor_dloader' : feature_tensor_dloader,
     }
     
     return loss_log
     
-    
+def update_mapped_autoencoder(ae_optimizer, X_train_batch, encoder, decoder, mapper, return_encoded_feature=False):
+    ae_optimizer.zero_grad()
+    z_posterior = encoder(X_train_batch)
+    mapped_z = mapper(z_posterior)
+    X_decoded = decoder(mapped_z)
+    pixelwise_loss = torch.nn.L1Loss(reduction='sum')
+    r_loss = pixelwise_loss(X_decoded, X_train_batch)
+    r_loss.backward()
+    ae_optimizer.step()
+    if return_encoded_feature:
+        return r_loss.item(), z_posterior.detach().cpu()
+    return r_loss.item()    
 
 def update_autoencoder(ae_optimizer, X_train_batch, encoder, decoder, return_encoded_feature=False):
     ae_optimizer.zero_grad()
@@ -385,7 +426,7 @@ def update_discriminator(d_optimizer, real_image, encoder, mapper, discriminator
     
     batch_size = real_image.size(0)
     device = real_image.device
-    bce = torch.nn.BCELoss()
+    bce = torch.nn.BCELoss(reduction='sum')
     
     label_one = torch.ones(batch_size, 1, device=device)
     label_zero = torch.zeros(batch_size, 1, device=device)

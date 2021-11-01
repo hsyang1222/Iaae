@@ -45,6 +45,9 @@ def insert_sample_image_inception(args, i, epochs, train_loader, mapper, decoder
                 sampled_images = inference_image_ulver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
             if model_name in ['ulearning_point', 'mimic_at_last', 'mimic', 'mimic+non-prior'] :
                 sampled_images = inference_image_ulpver(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
+            if model_name in ['vanilla-mimic'] : 
+                mapper = lambda x : x
+                sampled_images = inference_image(mapper, decoder, batch_size=each_batch.size(0), latent_dim=latent_dim, device=device)
             inception_model_score.put_fake(sampled_images) 
         if args.run_test : break
 
@@ -86,24 +89,36 @@ def gen_matric(wandb, args, train_loader, encoder, mapper, decoder, discriminato
         
     return metrics
 
+
+
 def wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device, fixed_z, loss_log) : 
     latent_dim = args.latent_dim
     model_name = args.model_name
     
-    fixed_fake_image = get_fixed_z_image_np(decoder(mapper(fixed_z)))
+    
+    fixed_fake_image = get_fixed_z_image_np(args.model_name, decoder, mapper, fixed_z)
     
     real_encoded_data = get_encoded_data(train_loader, encoder, device=device, size=2048)                
-    mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, latent_dim, args.mapper_inter_layer, device) 
+    mapper_test_data, mapper_out_data = make_mapper_out(model_name, mapper, real_encoded_data, latent_dim, args.mapper_inter_layer, device) 
 
-    if args.mapper_inter_layer > 0 :
+    if args.model_name in ['vanilla-mimic']:
+        show_Ex = False
+        show_mapped = True
+        show_z = True
+    elif args.mapper_inter_layer :
         show_mapped=True
+        show_Ex = True
         show_z = False
     else : 
         show_mapped=False
+        show_Ex = True
         show_z = True
         
-    mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, real_encoded_data, 1, show_mapped, show_z))
-    if isinstance(mapper, torch.nn.Module) : 
+    mapper_input_out_plot =  wandb.Image(pca_kde(mapper_test_data, mapper_out_data, \
+                                                 real_encoded_data, 1, show_mapped, show_z, show_Ex))
+    if args.model_name in ['vanilla-mimic'] : 
+        feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, torch.randn(2048, latent_dim), vanilla_mimic=True)
+    elif isinstance(mapper, torch.nn.Module) : 
         feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data)
     else :
         feature_kde = feature_plt_list(mapper_test_data, mapper_out_data, real_encoded_data, use_M_z=False)
@@ -117,11 +132,9 @@ def wandb_update(wandb, i, args, train_loader, encoder, mapper, decoder, device,
               })
   
     wandb.log(loss_log, step=i)
-    
-        
 
 def make_fixed_z(model_name, latent_dim, device):
-    if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior'] :
+    if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior',  'vanilla-mimic'] :
         z = torch.randn(8 ** 2, latent_dim, device=device)
     elif model_name in ['ulearning'] : 
         z = torch.rand(8 ** 2, latent_dim, device=device)
@@ -129,13 +142,15 @@ def make_fixed_z(model_name, latent_dim, device):
         z = torch.rand(8**2, latent_dim, device=device) * 2 -1 
     return z
 
-def make_mapper_out(model_name, mapper, latent_dim, mapper_inter_layer, device) : 
+def make_mapper_out(model_name, mapper, encoded, latent_dim, mapper_inter_layer, device) : 
     if model_name in ['vanilla', 'pointMapping_but_aae', 'non-prior'] :
         mapper_test_data = torch.randn(2048, latent_dim, device=device)
     elif model_name in ['ulearning'] :
         mapper_test_data = torch.rand(2048,latent_dim, device=device)
     elif model_name in ['ulearning_point', 'mimic_at_last', 'mimic', 'mimic+non-prior']:
         mapper_test_data = torch.rand(2048, latent_dim, device=device) * 2 -1
+    elif model_name in ['vanilla-mimic']:
+        mapper_test_data = encoded.to(device)
     if mapper_inter_layer > 0 : 
         with torch.no_grad():
             mapper_out_data = mapper(mapper_test_data)
@@ -144,21 +159,32 @@ def make_mapper_out(model_name, mapper, latent_dim, mapper_inter_layer, device) 
     return mapper_test_data.cpu(), mapper_out_data.cpu()
     
 
-def pca_kde(real, test, encoded, dim=1, show_mapped=False, show_z=False) : 
+def pca_kde(z_data, m_out_data, encoded, dim=1, show_mapped=False, show_z=False, show_Ex=False) : 
     plt.clf()
-    
-    all_data = torch.cat([real, test, encoded])
-    U, S, V = torch.pca_lowrank(all_data)
-    
-    pca1 = torch.matmul(real, V[:, :dim])
-    pca2 = torch.matmul(test, V[:, :dim])
-    pca3 = torch.matmul(encoded, V[:, :dim])
-    if show_z : 
-        sns.kdeplot(pca3.flatten().numpy(), label='E(x) - optimize')
-        plot = sns.kdeplot(pca1.flatten().numpy(), label='z - target')
-    if show_mapped : 
-        sns.kdeplot(pca2.flatten().numpy(), label='M(z) - optimize')
-        plot = sns.kdeplot(pca3.flatten().numpy(), label='E(x) - target')
+    if show_z and not show_mapped: 
+        all_data = torch.cat([z_data, encoded])
+        U, S, V = torch.pca_lowrank(all_data)
+        pca1 = torch.matmul(z_data, V[:, :dim])
+        pca3 = torch.matmul(encoded, V[:, :dim])
+        sns.kdeplot(pca3.flatten().numpy(), label='E(x)-optimize', alpha=0.6, color='r')
+        plot = sns.kdeplot(pca1.flatten().numpy(), label='Z-target', alpha=0.6, color='b')
+    if show_mapped and not show_z: 
+        all_data = torch.cat([m_out_data, encoded])
+        U, S, V = torch.pca_lowrank(all_data)
+        pca2 = torch.matmul(m_out_data, V[:, :dim])
+        pca3 = torch.matmul(encoded, V[:, :dim])
+        sns.kdeplot(pca2.flatten().numpy(), label='M(z)-optimize', alpha=0.6, color='r')
+        plot = sns.kdeplot(pca3.flatten().numpy(), label='E(x)-target', alpha=0.6, color='b')
+    if show_mapped and not show_Ex :
+        #case vanilla-mimic
+        all_data = torch.cat([z_data, encoded])
+        U, S, V = torch.pca_lowrank(all_data)
+        pca1 = torch.matmul(z_data, V[:, :dim])
+        pca2 = torch.matmul(m_out_data, V[:, :dim])
+        pca3 = torch.matmul(encoded, V[:, :dim])
+        sns.kdeplot(pca2.flatten().numpy(), label='M(E(x))-optimize', alpha=0.6, color='b')
+        sns.kdeplot(pca3.flatten().numpy(), label='E(x)-input', alpha=0.6, color='r')
+        plot = sns.kdeplot(pca1.flatten().numpy(), label='Z-target', alpha=0.6, color='g')
     plot.legend()
     return plot
 
@@ -171,19 +197,31 @@ def make_feature_plt(z, M_z, E_x, fnum) :
     ax1.set_title('feature ' + str(fnum))
     return fig1
 
-def make_feature_plt_notMz(z, E_x, fnum) : 
+def make_feature_plt_mimic(E_x, M_z, z, fnum) : 
     fig1, ax1 = plt.subplots()
-    sns.kdeplot(z, label='z', ax=ax1)
-    sns.kdeplot(E_x, label='E(x)', ax=ax1)
+    sns.kdeplot(z, label='Z-target', ax=ax1, alpha=0.6, color='g')
+    sns.kdeplot(E_x, label='E(x)-input', ax=ax1, alpha=0.6, color='r')
+    sns.kdeplot(M_z, label='M(E(z))-optimize', ax=ax1, alpha=0.6, color='b')
     ax1.legend()
     ax1.set_title('feature ' + str(fnum))
     return fig1
 
-def feature_plt_list(z, M_z, E_x, use_M_z=True) : 
+def make_feature_plt_notMz(z, E_x, fnum) : 
+    fig1, ax1 = plt.subplots()
+    sns.kdeplot(z, label='Z-target', ax=ax1, alpha=0.6, color='g')
+    sns.kdeplot(E_x, label='E(x)-optimize', ax=ax1, alpha=0.6, color='b')
+    ax1.legend()
+    ax1.set_title('feature ' + str(fnum))
+    return fig1
+
+def feature_plt_list(z, M_z, E_x, use_M_z=True, vanilla_mimic=False) : 
     plt.clf()
     plt_list = []
     assert z.size(1) == M_z.size(1) and M_z.size(1) == E_x.size(1)
-    if use_M_z : 
+    if vanilla_mimic : 
+        for i in range(z.size(1)) :
+            plt_list.append(make_feature_plt_mimic(z[:,i], M_z[:,i], E_x[:,i], i))
+    elif use_M_z : 
         for i in range(z.size(1)) :
             plt_list.append(make_feature_plt(z[:,i], M_z[:,i], E_x[:,i], i))
     else:
@@ -229,6 +267,28 @@ def encoded_feature_to_dl(encoded_feature_tensor, batch_size) :
     feature_tensor_dloader = torch.utils.data.DataLoader(feature_tensor_ds, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=12)
     return feature_tensor_dloader
 
+from scipy.stats import norm
+import matplotlib.pyplot as plt
+def encoded_feature_to_Ex_z(encoded_feature_tensor, batch_size) : 
+    #각 차원의 feature를 각 차원별로 sort한 tensor가 필요함
+    sorted_encoded_feature_tensor = torch.empty(encoded_feature_tensor.shape)
+    for each_dim in range(sorted_encoded_feature_tensor.size(1)) : 
+        sorted_encoded_feature_tensor[:,each_dim] = torch.sort(encoded_feature_tensor[:,each_dim])[0]
+
+    # gaussian을 따르는 value를 만든다음에 sort하여 사용
+    uniform_input = torch.empty(sorted_encoded_feature_tensor.shape)
+    for each_dim in range(sorted_encoded_feature_tensor.size(1)) : 
+        x = np.linspace(1e-12, 1- 1e-12, sorted_encoded_feature_tensor.size(0))
+        data = norm.ppf(x)
+        uniform_input[:,each_dim] = torch.tensor(data, dtype=torch.float64)
+
+    # Ex를 -1~1사이의 균일한 값으로 mapping하는 dataloader!
+    feature_tensor_ds = torch.utils.data.TensorDataset(sorted_encoded_feature_tensor, uniform_input)
+    feature_tensor_dloader = torch.utils.data.DataLoader(feature_tensor_ds, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=12)
+    return feature_tensor_dloader
+    
+    
+
 def make_ulearning_dsl(original_train_loader, encoder, device, batch_size):
     encoded_data_list = []
     encoder.eval()
@@ -243,7 +303,6 @@ def make_ulearning_dsl(original_train_loader, encoder, device, batch_size):
     
     encoder.train()
     return feature_tensor_dloader
-
 
 def get_encoded_data(train_loader, encoder, device, size=2048) :
     encoded_data_list = []
@@ -260,6 +319,13 @@ def get_encoded_data(train_loader, encoder, device, size=2048) :
 def sample_image(encoder, decoder, x):
     z = encoder(x)
     return decoder(z)
+
+def inference_image_lin(decoder, batch_size, latent_dim, device) :
+    with torch.no_grad() : 
+        z = torch.rand(batch_size, latent_dim).to(device) * 2 - 1
+        result = decoder(z).detach().cpu()
+    return result
+
 
 def inference_image(mapper, decoder, batch_size, latent_dim, device) :
     # normal distribution
@@ -285,7 +351,12 @@ def inference_image_ulpver(mapper, decoder, batch_size, latent_dim, device) :
 
 
 import torchvision.utils as vutils
-def get_fixed_z_image_np(fake_image, nrow=8) : 
+def get_fixed_z_image_np(model_name, decoder, mapper, fixed_z, nrow=8) : 
+    if model_name in ['vanilla-mimic'] : 
+        fake_image = decoder(fixed_z)
+    else : 
+        fake_image = decoder(mapper(fixed_z))
+    
     fake_image = fake_image * 0.5 + 0.5
     fake_np = vutils.make_grid(fake_image.detach().cpu(), nrow).permute(1,2,0).numpy()
     return fake_np  
