@@ -46,8 +46,10 @@ def main(args):
 
     if args.wandb : 
         wandb.login()
-        wandb_name = dataset+','+model_name +','+str(img_size)+",convchange"
+        wandb_name = dataset+','+model_name
+        if args.reparm : wandb_name += '(reparm)'
         if args.run_test : wandb_name += ', test run'
+        wandb_name += (','+str(img_size))
         wandb.init(project=project_name, 
                    config=args,
                    name = wandb_name)
@@ -244,6 +246,9 @@ if __name__ == "__main__":
                                                                               'pointMapping_but_aae', 'non-prior', \
                                                                               'mimic_at_last', 'mimic', 'mimic+non-prior',
                                                                              'vanilla-mimic'])
+    parser.add_argument('--reparm', type=bool, default=False)
+    
+    
     parser.add_argument('--std_maximize', type=bool, default=False)
     parser.add_argument('--std_alpha', type=float, default=0.1)
     parser.add_argument('--train_m_interval', type=int, default=1)

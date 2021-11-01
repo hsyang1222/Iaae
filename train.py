@@ -187,8 +187,14 @@ def train_main(args, train_loader, i, device, ae_optimizer, m_optimizer, d_optim
             if args.run_test : break
 
     if model_name in ['vanilla-mimic'] : 
-        feature_tensor_dloader = encoded_feature_to_Ex_z(torch.cat(encoded_feature_list), args.batch_size)
+        feature_tensor_dloader, mu, sig = encoded_feature_to_Ex_z(torch.cat(encoded_feature_list), args.batch_size)
         loss_m_sum = -1.
+        
+        if args.reparm : 
+            mapper.set_reparm(mu, sig)
+            #print("mu :", mu)
+            #print("sig :", sig)
+        
         for m_i in range(0, args.train_m) : 
             last_loss = loss_m_sum
             loss_m_sum = 0.
